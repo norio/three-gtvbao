@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#e9e5dd">
+    <meta name="description" content="An architectural study of light and shadow. Explore ambient occlusion with three.js WebGPU / WebGL2 and GT-VBAO.">
+    <title>Three GT-VBAO</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="preload" href="/fonts/newsreader-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/example/style.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <a class="wordmark" href="https://github.com/norio/three-gtvbao" target="_blank" rel="noreferrer">three-gtvbao <span>↗</span></a>
+      <span class="edition">INTERACTIVE STUDY / 001</span>
+    </header>
+    <section class="intro" aria-label="About this study">
+      <p class="eyebrow">Three.js / Ambient occlusion</p>
+      <h1>GT<span>-</span>VBAO</h1>
+      <p class="description">Ground Truth Visibility Bitmask Ambient Occlusion.</p>
+    </section>
+    <div class="render-status" id="render-status">
+      <div id="render-backend" role="status">Preparing the scene…</div>
+      <div id="render-metrics"><span id="render-quality"></span></div>
+    </div>
+    <nav class="view-controls" aria-label="Display mode">
+      <button data-view="beauty" aria-pressed="true">Full render</button>
+      <button data-view="ao" aria-pressed="false">AO only</button>
+      <button data-view="off" aria-pressed="false">AO off</button>
+    </nav>
+    <footer class="toolbar">
+      <div class="camera-controls" aria-label="Camera views">
+        <span class="toolbar-label">VIEW</span>
+        <button data-camera="overview" aria-pressed="true">Overview</button>
+        <button data-camera="arcade" aria-pressed="false">Arcade</button>
+        <button data-camera="detail" aria-pressed="false">Detail</button>
+      </div>
+      <div class="utility-controls">
+        <button id="rotate" aria-pressed="false">Auto rotate</button>
+        <button id="auto-lighting" aria-pressed="false" title="Slowly orbit the light; turn off to pause">Auto lighting</button>
+        <button id="settings-toggle" aria-expanded="false" aria-controls="tuning-panel">Settings <span>+</span></button>
+      </div>
+    </footer>
+    <p class="gesture-hint">Drag to orbit · Scroll to zoom</p>
+    <noscript>This study requires JavaScript and a browser that supports WebGPU or WebGL2.</noscript>
+    <script type="module" src="/example/main.ts"></script>
+  </body>
+</html>

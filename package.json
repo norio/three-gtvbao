@@ -1,0 +1,70 @@
+{
+  "name": "three-gtvbao",
+  "version": "0.1.0",
+  "description": "GT-VBAO ambient occlusion for three.js WebGPU and WebGL2 (TSL): visibility-bitmask AO with the GT-VBAO corrections, a depth-MIP prefilter, a denoiser and a depth-aware upsample",
+  "type": "module",
+  "license": "MIT",
+  "author": "norio",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/norio/three-gtvbao.git"
+  },
+  "homepage": "https://github.com/norio/three-gtvbao#readme",
+  "bugs": {
+    "url": "https://github.com/norio/three-gtvbao/issues"
+  },
+  "keywords": [
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl2",
+    "tsl",
+    "ambient-occlusion",
+    "ao",
+    "ssao",
+    "gtao",
+    "vbao",
+    "gt-vbao",
+    "visibility-bitmask",
+    "post-processing"
+  ],
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./src/*": "./src/*"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "README.ja.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:treeshake": "vitest run test/TreeShaking.test.ts"
+  },
+  "peerDependencies": {
+    "three": ">=0.184.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "@types/three": "^0.184.1",
+    "stats-gl": "^4.2.3",
+    "three": "^0.184.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.4",
+    "vitest": "^4.1.8"
+  }
+}

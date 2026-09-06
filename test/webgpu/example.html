@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>GTVBAO example regression</title>
+  <style>
+    body { margin: 24px; background: #181818; color: #eee; font: 14px system-ui; }
+    .lil-gui, body > canvas { display: none; }
+    section { display: inline-block; margin: 0 24px 24px 0; }
+    canvas { width: 320px; height: 240px; }
+  </style>
+  <h1>GTVBAO example regression</h1>
+  <p>Production example graph, frozen camera and scene. Actual backend pass counts and float readback.</p>
+  <pre id="status">Running…</pre>
+  <div id="images"></div>
+  <script type="module" src="./example.ts"></script>
+</html>

@@ -1,0 +1,207 @@
+@font-face {
+  font-family: "Newsreader";
+  src: url("/fonts/newsreader-latin-400.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/fonts/ibm-plex-sans-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+}
+
+:root {
+  --font-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Newsreader", Georgia, serif;
+  --muted: #65655d;
+  --accent: #8b4931;
+  --page-inset: clamp(22px, 3vw, 48px);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: #393831;
+  background: #e9e5dd;
+  font-synthesis: none;
+  font-kerning: normal;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; }
+body > canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+button:hover { color: var(--accent); }
+.masthead, .intro, .view-controls, .toolbar, .gesture-hint, .render-status { position: fixed; z-index: 1; }
+.masthead {
+  top: 28px;
+  left: var(--page-inset);
+  right: var(--page-inset);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.wordmark { color: inherit; text-decoration: none; font-size: 16px; letter-spacing: -.04em; font-weight: 600; }
+.wordmark span { margin-left: 10px; font-weight: 400; color: var(--muted); }
+.edition, .eyebrow, .toolbar-label {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.edition { color: var(--muted); }
+.intro { top: 108px; left: var(--page-inset); right: var(--page-inset); pointer-events: none; }
+.eyebrow { color: var(--accent); margin: 0 0 18px; }
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(56px, 6vw, 84px);
+  font-weight: 400;
+  line-height: .98;
+  letter-spacing: -.045em;
+  margin: 0;
+}
+h1 span { color: var(--muted); }
+.description {
+  max-width: 34ch;
+  margin: 16px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: .005em;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+.render-status {
+  top: 111px;
+  right: var(--page-inset);
+  font-size: 11px;
+  line-height: 1.8;
+  letter-spacing: .045em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+#render-backend { font-weight: 500; }
+#render-metrics { margin-top: 3px; }
+#fps-stats { margin-right: 1ch; color: #514e45; font-weight: 600; }
+#fps-stats::after { content: " /"; font-weight: 400; color: var(--muted); }
+.view-controls {
+  bottom: 116px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid #fff9;
+  border-radius: 40px;
+  background: #f9f7f0d9;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 5px 25px #5148370c;
+}
+.view-controls button {
+  border: 0;
+  background: transparent;
+  min-height: 44px;
+  padding: 10px 22px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  transition: background .2s, color .2s;
+}
+.view-controls button[aria-pressed="true"] { background: #393831; color: #fffdf6; }
+.toolbar {
+  bottom: 37px;
+  left: var(--page-inset);
+  right: var(--page-inset);
+  border-top: 1px solid #736b572a;
+  padding-top: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 24px;
+}
+.camera-controls, .utility-controls { display: flex; gap: 24px; align-items: center; }
+.toolbar button { border: 0; background: transparent; min-height: 36px; padding: 6px 0; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.toolbar-label { color: var(--muted); margin-right: 2px; }
+.toolbar button[aria-pressed="true"] { color: var(--accent); }
+#settings-toggle span { margin-left: 10px; }
+.gesture-hint { bottom: 9px; left: var(--page-inset); margin: 0; font-size: 11px; letter-spacing: .015em; color: var(--muted); pointer-events: none; }
+
+.lil-gui.root, .lil-gui.root .lil-gui {
+  --background-color: #f7f4edef;
+  --widget-color: #e5e0d5;
+  --hover-color: #dbd4c7;
+  --focus-color: #d3cbbc;
+  --text-color: #47453d;
+  --title-background-color: #e8e2d6;
+  --title-text-color: #47453d;
+  --number-color: #8b4931;
+  --string-color: #8b4931;
+  --font-size: 12px;
+  --font-family: var(--font-ui);
+  --widget-height: 24px;
+  --width: 300px;
+}
+
+.lil-gui.root {
+  position: fixed;
+  top: 174px;
+  right: var(--page-inset);
+  bottom: auto;
+  max-width: calc(100vw - 2 * var(--page-inset));
+  max-height: calc(100dvh - 290px);
+  border: 1px solid #fff9;
+  border-radius: 8px;
+  overflow-y: auto;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 32px #4c43331a;
+}
+
+@media (max-width: 640px) {
+  .masthead { top: 20px; align-items: flex-start; }
+  .wordmark { font-size: 15px; white-space: nowrap; }
+  .edition { max-width: 15ch; font-size: 10px; letter-spacing: .08em; text-align: right; }
+  .intro { top: 91px; }
+  .eyebrow { font-size: 10px; margin-bottom: 16px; }
+  h1 { font-size: clamp(52px, 10vw, 64px); }
+  .description { font-size: 13px; max-width: 32ch; margin-top: 12px; }
+  .render-status { top: 250px; left: var(--page-inset); right: auto; text-align: left; font-size: 10px; }
+  .toolbar { bottom: 36px; padding-top: 8px; flex-wrap: wrap; gap: 0 24px; }
+  .camera-controls, .utility-controls { gap: 18px; }
+  .toolbar-label { display: none; }
+  .toolbar button { font-size: 12px; }
+  .utility-controls { margin-left: auto; }
+  .view-controls { bottom: 140px; }
+  .view-controls button { padding: 10px 18px; font-size: 12px; }
+  .gesture-hint { font-size: 10px; }
+  .lil-gui.root { top: 80px; max-height: calc(100dvh - 220px); }
+}
+
+@media (max-height: 600px) and (min-width: 641px) {
+  .intro { top: 70px; }
+  .eyebrow { margin-bottom: 10px; }
+  h1 { font-size: 48px; }
+  .description { display: none; }
+  .render-status { top: 72px; left: auto; right: var(--page-inset); text-align: right; }
+  .view-controls { bottom: 80px; }
+  .toolbar { bottom: 16px; padding-top: 6px; }
+  .gesture-hint { display: none; }
+  .lil-gui.root { top: 118px; max-height: calc(100dvh - 200px); }
+}
+
+@media (max-height: 600px) and (max-width: 640px) {
+  .intro { top: 72px; }
+  .eyebrow { margin-bottom: 10px; }
+  h1 { font-size: 48px; }
+  .description { display: none; }
+  .render-status { top: 170px; }
+}

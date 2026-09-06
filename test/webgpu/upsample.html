@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>GTVBAO upsample regression</title>
+  <style>
+    body { margin: 24px; font: 14px system-ui; background: #181818; color: #eee; }
+    pre { white-space: pre-wrap; }
+    section { display: inline-block; margin: 0 24px 24px 0; }
+    canvas { width: 384px; height: 128px; image-rendering: pixelated; }
+  </style>
+  <h1>GTVBAO upsample regression</h1>
+  <p>Each image shows GPU output / bilinear reference / absolute difference × 4.</p>
+  <pre id="status">Running…</pre>
+  <div id="images"></div>
+  <script type="module" src="./upsample.ts"></script>
+</html>

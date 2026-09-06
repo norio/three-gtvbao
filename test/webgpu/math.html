@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>GTVBAO shader math regression</title>
+  <style>
+    body { margin: 24px; font: 14px system-ui; background: #181818; color: #eee; }
+    pre { white-space: pre-wrap; }
+  </style>
+  <h1>GTVBAO shader math regression</h1>
+  <p>Production TSL, ten GPU draws, float readback, independent mathematical references.</p>
+  <p>This GPU check is separate from npm test, which only generates WGSL.</p>
+  <pre id="status">Running…</pre>
+  <script type="module" src="./math.ts"></script>
+</html>
