@@ -15,6 +15,11 @@ three.js の `SSGINode` の AO 経路と `DenoiseNode` をベースに、Mirko S
 - 5 種類の品質プリセット、デバッグビュー、TypeScript 型定義。
 - Tree shaking に対応したネイティブ ESM。必要な名前付きエクスポートだけをインポートできます。実行時オプションでバンドル内のコードが除去されるわけではありません。
 
+## デモ
+
+[デモを開く](https://norio.github.io/three-gtvbao/)と、プリセットや AO の設定を試せます。
+実際のバックエンド名が表示されます。[WebGL2 を強制するデモ](https://norio.github.io/three-gtvbao/?backend=webgl)も利用できます。
+
 ## 要件
 
 - three.js **r184** 以上 (`three/webgpu` と `three/tsl`)。
@@ -213,6 +218,10 @@ Vite が表示するローカル URL (通常は `http://localhost:5173`) を開�
 
 `npm test` には tree shaking の検証も含まれます。単独で実行する場合は `npm run test:treeshake` を使います。
 ブラウザでの GPU 検証は別途実施します。[WebGPU / WebGL2 回帰テスト](test/webgpu/README.md) を参照してください。
+
+サンプルは `master` への push 後に [GitHub Actions](.github/workflows/ci.yml) で
+GitHub Pages に自動公開されます。Pages 向けのビルドコマンドは
+`npm run build -- --base=/three-gtvbao/`、公開対象は `dist/` です。
 
 ## クレジット
 

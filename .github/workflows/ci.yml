@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -21,3 +25,33 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  deploy:
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/configure-pages@v5
+      - run: npm ci
+      - run: npm run build -- --base=/three-gtvbao/
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -15,6 +15,11 @@ It applies AO to indirect lighting through `builtinAOContext` and `RenderPipelin
 - Five quality presets, debug views and TypeScript declarations.
 - Native ESM with tree shaking; import only the named exports you need. Runtime options do not remove bundled code.
 
+## Live demo
+
+[Open the demo](https://norio.github.io/three-gtvbao/) to explore the presets and AO controls.
+The active backend is shown in the demo; [force WebGL2](https://norio.github.io/three-gtvbao/?backend=webgl) to try that backend.
+
 ## Requirements
 
 - three.js **r184** or newer (`three/webgpu` and `three/tsl`).
@@ -214,6 +219,10 @@ shows the active backend; append `?backend=webgl` to force WebGL2. In your app, 
 
 `npm test` includes the tree-shaking checks; `npm run test:treeshake` runs those alone.
 Browser GPU checks are separate: see [WebGPU / WebGL2 regressions](test/webgpu/README.md).
+
+The example is published to GitHub Pages by [GitHub Actions](.github/workflows/ci.yml)
+after each push to `master`. The Pages build uses `npm run build -- --base=/three-gtvbao/`
+and publishes `dist/`.
 
 ## Credits
 
