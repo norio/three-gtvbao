@@ -28,6 +28,11 @@ const MIN_WEIGHT = 1e-4;
  */
 export function createGtvbaoDepthAwareAo( aoNode, aoTexture, { screenUv, viewPosition, viewNormal } ) {
 	return Fn( () => {
+		// Material normals are shared with the subsequent lighting code. Evaluate
+		// them outside the optional upsample branch: r185 otherwise initializes
+		// normalView only inside that branch, leaving full-resolution lighting
+		// with a zero normal when the branch is skipped.
+		const surfaceNormal = viewNormal.toVar();
 		const result = float( 0 ).toVar();
 		If( aoNode._upsampleEnabled.greaterThan( 0.5 ), () => {
 			const linearDepthTexture = aoNode.getDepthMipNodes()[ 0 ];
@@ -54,7 +59,7 @@ export function createGtvbaoDepthAwareAo( aoNode, aoTexture, { screenUv, viewPos
 				// neighbor's point is reconstructed at that texel's center.
 				const sourceUv = depthTexelOfAoTexel( texel, depthResolution, aoResolution ).add( 0.5 ).div( depthResolution );
 				const neighbor = viewPositionFromLinearDepth( sourceUv, linearDepthTexture.load( ivec2( texel ) ).r );
-				const planeDistance = abs( dot( neighbor.sub( viewPosition ), viewNormal ) );
+				const planeDistance = abs( dot( neighbor.sub( viewPosition ), surfaceNormal ) );
 				const weight = bilinear.mul( planeDistance.div( tolerance ).oneMinus().clamp() ).toConst();
 				aoSum.addAssign( ao.mul( weight ) );
 				weightSum.addAssign( weight );

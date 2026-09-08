@@ -4,8 +4,11 @@ import { GTVBAO_PASS_NAMES } from "../../src/index.js";
 import {
   renderer, scene, camera, controls, aoNode, denoiseNode, prePass, pipeline, settings, syncOutput,
 } from "../../example/main.js";
+import { setCameraView } from "../../example/presentation.js";
 
 import { assertBackend, readFloatTarget, reportProgress } from "./backend.js";
+import { compareLightingImage, type LightingImageMetrics } from "./lighting-image.js";
+import { inspectAoTexture } from "./ao-texture-diagnostics.js";
 
 const WIDTH = 320;
 const HEIGHT = 240;
@@ -14,7 +17,9 @@ document.querySelector(".lil-gui.root")?.remove();
 renderer.setPixelRatio(1);
 renderer.setSize(WIDTH, HEIGHT);
 camera.aspect = WIDTH / HEIGHT;
-camera.updateProjectionMatrix();
+// Reapply the composition after fixing aspect: the public example initially
+// chooses its position and FOV from the browser window's dimensions.
+setCameraView("overview", camera, controls);
 controls.enableDamping = false;
 controls.update();
 // Freeze the moving ceramic at the same pose even if the example rendered
@@ -96,13 +101,14 @@ async function readOutput(output = pipeline) {
   return await readFloatTarget(renderer, target);
 }
 
-function renderFrames(scenario: string) {
+function renderFrames(scenario: string, captureFirst: boolean) {
   reportProgress(`${scenario}: waiting for frame 1/5`);
   // The renderer's animation loop advances NodeFrame's FRAME guard. Calling
   // render() repeatedly in one frame would only rerun the final screen quad.
-  return new Promise<{ pixels: Float32Array; observed: Counts }>((resolve, reject) => {
+  return new Promise<{ pixels: Float32Array; firstPixels: Float32Array | null; observed: Counts }>((resolve, reject) => {
     let frames = 0;
-    renderer.setAnimationLoop(() => {
+    let firstPixels: Float32Array | null = null;
+    const draw = () => {
       try {
         counts = emptyCounts();
         renderer.setRenderTarget(target);
@@ -110,21 +116,34 @@ function renderFrames(scenario: string) {
         pipeline.render();
         assertFiniteCamera(`${scenario}, frame ${frames + 1}/5`);
         reportProgress(`${scenario}: rendered frame ${frames + 1}/5`);
-        if (++frames === 5) {
+        frames++;
+        if (frames === 1 && captureFirst) {
+          // Pause while copying the first image so a later frame cannot write
+          // into the same target before the asynchronous readback completes.
+          renderer.setAnimationLoop(null);
+          readFloatTarget(renderer, target).then(pixels => {
+            firstPixels = pixels;
+            renderer.setAnimationLoop(draw);
+          }, reject);
+        } else if (frames === 5) {
           renderer.setAnimationLoop(null);
           const observed = { ...counts };
           readFloatTarget(renderer, target)
-            .then(pixels => resolve({ pixels: pixels as Float32Array, observed }), reject);
+            .then(pixels => resolve({ pixels, firstPixels, observed }), reject);
         }
       } catch (error) {
         renderer.setAnimationLoop(null);
         reject(error);
       }
-    });
+    };
+    renderer.setAnimationLoop(draw);
   });
 }
 
-type Scenario = { name: string; enabled: boolean; traa: boolean; only?: boolean; denoise?: boolean; debug?: number; temporal?: boolean };
+type Scenario = {
+  name: string; enabled: boolean; traa: boolean; only?: boolean; denoise?: boolean;
+  debug?: number; temporal?: boolean; intensity?: number; resolutionScale?: number;
+};
 const scenarios: Scenario[] = [
   // Match the public view buttons: Showcase keeps temporal sampling and TRAA
   // enabled when entering AO-only, including its first RTT allocation.
@@ -159,11 +178,19 @@ const scenarios: Scenario[] = [
   { name: "denoised-lit-traa", enabled: true, traa: true, denoise: true },
   { name: "debug-return", enabled: true, traa: false, debug: 5 },
   { name: "final-off-direct", enabled: false, traa: false },
+  ...[1, 0.5].flatMap(resolutionScale => [false, true].map(denoise => ({
+    name: `${denoise ? "denoised" : "raw"}-neutral-${resolutionScale === 1 ? "full" : "half"}`,
+    enabled: true, traa: false, denoise, intensity: 0, resolutionScale,
+  }))),
+  { name: "raw-lit-half", enabled: true, traa: false, resolutionScale: 0.5 },
+  { name: "denoised-lit-half", enabled: true, traa: false, denoise: true, resolutionScale: 0.5 },
 ];
 
 async function run() {
   const backendName = assertBackend(renderer);
   const results = [];
+  const defaultIntensity = aoNode.aoIntensity.value;
+  let unoccluded: Float32Array | null = null;
   for (const scenario of scenarios) {
     const debug = scenario.debug ?? 0;
     const only = scenario.only ?? false;
@@ -172,10 +199,13 @@ async function run() {
       aoEnabled: scenario.enabled, aoOnly: only, denoise,
       traa: scenario.traa, temporal: scenario.temporal ?? false,
     });
+    aoNode.aoIntensity.value = scenario.intensity ?? defaultIntensity;
+    aoNode.resolutionScale = scenario.resolutionScale ?? 1;
     aoNode.debugMode.value = debug;
     reportProgress(`${scenario.name}: synchronizing output`);
     syncOutput();
-    const { pixels, observed } = await renderFrames(scenario.name);
+    const checkLighting = !scenario.traa && !only && debug === 0;
+    const { pixels, firstPixels, observed } = await renderFrames(scenario.name, checkLighting);
     const runsAo = scenario.enabled || only || debug > 0;
     const expected = {
       pre: runsAo || scenario.traa ? 1 : 0,
@@ -187,6 +217,17 @@ async function run() {
     };
     let passed = Object.entries(expected).every(([key, value]) => observed[key as keyof Counts] === value);
     if (!pixels.every(Number.isFinite)) throw new Error(`Nonfinite output in ${scenario.name}`);
+    if (scenario.name === "off-direct") unoccluded = pixels;
+    const lighting: { frame: number; metrics: LightingImageMetrics }[] = [];
+    if (checkLighting) {
+      if (unoccluded === null || firstPixels === null) throw new Error(`Missing lighting reference in ${scenario.name}`);
+      const expectIdentity = !scenario.enabled || scenario.intensity === 0;
+      for (const [frame, image] of [[1, firstPixels], [5, pixels]] as const) {
+        const metrics = compareLightingImage(image, unoccluded, WIDTH, HEIGHT, expectIdentity);
+        lighting.push({ frame, metrics });
+        passed &&= metrics.passed;
+      }
+    }
     let maxDebugError = 0;
     if (debug > 0) {
       // Read the exact rendered AO texture, without its PassNode dependency,
@@ -203,7 +244,14 @@ async function run() {
     }
     const digest = await crypto.subtle.digest("SHA-256", pixels.buffer as ArrayBuffer);
     const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-    results.push({ name: scenario.name, passed, observed, expected, maxDebugError, hash });
+    let neutralAo = null;
+    if (scenario.intensity === 0) {
+      const raw = await inspectAoTexture(renderer, aoNode.getTextureNode().value);
+      const denoised = denoise ? await inspectAoTexture(renderer, denoiseNode.getTextureNode().value) : null;
+      neutralAo = { frame: 5, passed: raw.passed && (denoised?.passed ?? true), raw, denoised };
+      passed &&= neutralAo.passed;
+    }
+    results.push({ name: scenario.name, passed, observed, expected, maxDebugError, lighting, neutralAo, hash });
     if (["off-direct", "raw-lit", "ao-only", "debug-5"].includes(scenario.name)) showPixels(scenario.name, pixels);
   }
   return { backend: backendName, passed: results.every(result => result.passed), results };
@@ -213,7 +261,9 @@ try {
   const result = await run();
   Object.assign(window, { exampleRegression: result });
   document.querySelector("#status")!.textContent = `${result.passed ? "PASS" : "FAIL"} — ${result.backend}\n` +
-    result.results.map(entry => `${entry.passed ? "PASS" : "FAIL"} ${entry.name}: passes ${JSON.stringify(entry.observed)}, debug error ${entry.maxDebugError.toExponential(2)}`).join("\n");
+    result.results.map(entry => `${entry.passed ? "PASS" : "FAIL"} ${entry.name}: passes ${JSON.stringify(entry.observed)}, ` +
+      `debug error ${entry.maxDebugError.toExponential(2)}, lighting ${JSON.stringify(entry.lighting)}, ` +
+      `neutral AO ${JSON.stringify(entry.neutralAo)}`).join("\n");
 } catch (error) {
   const result = { passed: false, error: String(error) };
   Object.assign(window, { exampleRegression: result });

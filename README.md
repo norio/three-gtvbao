@@ -22,7 +22,7 @@ The active backend is shown in the demo; [force WebGL2](https://norio.github.io/
 
 ## Requirements
 
-- three.js **r184** or newer (`three/webgpu` and `three/tsl`).
+- three.js **r184** or newer (`three/webgpu` and `three/tsl`). This source revision is verified with **0.184.0 and 0.185.1** on WebGPU and WebGL2; see the [lighting compatibility regression](docs/r185-lighting-regression.md).
 - `WebGPURenderer` with its WebGPU or WebGL2 backend; the legacy `WebGLRenderer` is unsupported.
 - `EXT_color_buffer_float` when using WebGL2.
 - A `PerspectiveCamera`.

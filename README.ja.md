@@ -22,7 +22,7 @@ three.js の `SSGINode` の AO 経路と `DenoiseNode` をベースに、Mirko S
 
 ## 要件
 
-- three.js **r184** 以上 (`three/webgpu` と `three/tsl`)。
+- three.js **r184** 以上 (`three/webgpu` と `three/tsl`)。このソース版は **0.184.0 と 0.185.1** の WebGPU / WebGL2 で検証済みです。[照明の互換性検証](docs/r185-lighting-regression.md)を参照してください。
 - `WebGPURenderer` の WebGPU / WebGL2 バックエンド。従来の `WebGLRenderer` は非対応です。
 - WebGL2 を使う場合は `EXT_color_buffer_float`。
 - `PerspectiveCamera`。

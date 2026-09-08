@@ -10,7 +10,8 @@ have no rendering errors.
 | `/test/webgpu/depth-mips.html` | 270 depth-MIP cases against a CPU reference | `window.depthMipRegression` |
 | `/test/webgpu/upsample.html` | 14 depth-aware upsample cases | `window.upsampleRegression` |
 | `/test/webgpu/math.html` | 12,720 shader comparisons against independent references | `window.mathRegression` |
-| `/test/webgpu/example.html` | 23 display/pass-order transitions in the production example | `window.exampleRegression` |
+| `/test/webgpu/lighting.html` | Constant-AO lighting against an independent reference | `window.lightingRegression` |
+| `/test/webgpu/example.html` | 39 display/pass-order and lighting-image scenarios in the production example | `window.exampleRegression` |
 
 Wait for the completion result before reading it; require `passed === true`.
 The requested backend being unavailable is a failure, never a skipped passing case. These
@@ -80,3 +81,36 @@ while still drawing the lit scene once. AO-only and every debug view are checked
 including returning to previously cached outputs. Debug RGB is compared with a
 separate read of the exact AO texture rendered in that frame, and must bypass
 denoising and TRAA. The comparison occurs before display color conversion.
+
+## Lighting and version compatibility
+
+`lighting.html` renders one sphere with ambient and directional light. The public
+upsample helper reads a constant 0.6 AO texture at full resolution, and a separate
+scene pass uses `builtinAOContext(float(0.6))` as the independent reference.
+The image must match within `2e-5`; the reference center must also be lit, so two
+black images cannot pass. `?shaders=1` displays the actual material shaders.
+This reproduces the r185 failure without temporal sampling, denoising or AO math.
+
+The example compares the first and fifth frame **after each mode switch** for
+non-TRAA lighting. This is not a cold-start test of every example mode. Neutral
+AO is checked against the same session's AO-off image, with one binary16 ULP
+allowed per RGB component because the scene pass uses a half-float target,
+and mean luminance ratio must remain within `1e-5` of unity. The raw and rendered
+denoised AO textures must also be neutral. Regular AO must retain at least half
+the reference luminance in the central region, with at most 10% of those pixels
+darkened by over 95%. These are blackening guards, not AO quality scores.
+TRAA cases retain the existing pass-count and finite-output checks.
+
+To run identical code against a different Three.js version without changing the
+project's dependencies:
+
+```sh
+npm install --prefix /tmp/gtvbao-r185 --no-save three@0.185.1
+THREE_ROOT=/tmp/gtvbao-r185/node_modules/three PORT=5193 node test/webgpu/serve-version.mjs
+```
+
+Run the same pages at port 5193 and at the regular development server. Repeat
+with `?backend=webgl`. The version server aliases all `three`, `three/webgpu`,
+`three/tsl`, addons and example imports together. Use fresh page loads after
+source changes. [The r185.1 investigation](../../docs/r185-lighting-regression.md)
+records the observed failure, generated shader cause, and verification scope.
