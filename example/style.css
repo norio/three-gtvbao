@@ -33,8 +33,9 @@
 body { margin: 0; overflow: hidden; }
 body > canvas { position: fixed; inset: 0; display: block; touch-action: none; }
 button, a { -webkit-tap-highlight-color: transparent; }
+select { font: inherit; color: inherit; cursor: pointer; }
 button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 button:hover { color: var(--accent); }
 .masthead, .intro, .view-controls, .toolbar, .gesture-hint, .render-status { position: fixed; z-index: 1; }
 .masthead {
@@ -129,7 +130,9 @@ h1 span { color: var(--muted); }
   align-items: center;
   gap: 12px 24px;
 }
-.camera-controls, .utility-controls { display: flex; gap: 24px; align-items: center; }
+.camera-controls, .utility-controls, .projection-control { display: flex; gap: 24px; align-items: center; }
+.projection-control { gap: 8px; }
+.projection-control select { border: 1px solid #736b5738; border-radius: 5px; background: #f9f7f0; min-height: 36px; padding: 5px 8px; font-size: 13px; }
 .toolbar button { border: 0; background: transparent; min-height: 36px; padding: 6px 0; font-size: 13px; font-weight: 500; white-space: nowrap; }
 .toolbar-label { color: var(--muted); margin-right: 2px; }
 .toolbar button[aria-pressed="true"] { color: var(--accent); }
@@ -166,6 +169,12 @@ h1 span { color: var(--muted); }
   box-shadow: 0 12px 32px #4c43331a;
 }
 
+@media (min-width: 641px) and (max-width: 1040px) {
+  .toolbar { flex-wrap: wrap; }
+  .utility-controls { margin-left: auto; }
+  .view-controls { bottom: 155px; }
+}
+
 @media (max-width: 640px) {
   .masthead { top: 20px; align-items: flex-start; }
   .wordmark { font-size: 15px; white-space: nowrap; }
@@ -179,8 +188,9 @@ h1 span { color: var(--muted); }
   .camera-controls, .utility-controls { gap: 18px; }
   .toolbar-label { display: none; }
   .toolbar button { font-size: 12px; }
+  .projection-control select { font-size: 12px; }
   .utility-controls { margin-left: auto; }
-  .view-controls { bottom: 140px; }
+  .view-controls { bottom: 180px; }
   .view-controls button { padding: 10px 18px; font-size: 12px; }
   .gesture-hint { font-size: 10px; }
   .lil-gui.root { top: 80px; max-height: calc(100dvh - 220px); }
@@ -204,4 +214,8 @@ h1 span { color: var(--muted); }
   h1 { font-size: 48px; }
   .description { display: none; }
   .render-status { top: 170px; }
+}
+
+@media (max-height: 600px) and (min-width: 641px) and (max-width: 1040px) {
+  .view-controls { bottom: 120px; }
 }

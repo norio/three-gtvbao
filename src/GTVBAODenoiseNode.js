@@ -20,7 +20,6 @@ import {
 	dot,
 	float,
 	floor,
-	getNormalFromDepth,
 	int,
 	ivec2,
 	logarithmicDepthToViewZ,
@@ -29,7 +28,6 @@ import {
 	min,
 	nodeObject,
 	passTexture,
-	perspectiveDepthToViewZ,
 	pow,
 	property,
 	reference,
@@ -44,10 +42,11 @@ import {
 	viewZToPerspectiveDepth
 } from 'three/tsl';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+import { getDepthNormal } from './GTVBAODepthNormal.js';
 import { depthTexelOfAoTexel } from './GTVBAODepthPrefilter.js';
 import { GTVBAO_PASS_NAMES } from './GTVBAOPassNames.js';
 import { createGtvbaoRenderTarget } from './GTVBAORenderTarget.js';
-import { createPerspectiveViewPositionFromLinearDepth, getPerspectiveViewPosition } from './GTVBAOViewSpace.js';
+import { createViewPositionFromLinearDepth, getViewPosition } from './GTVBAOViewSpace.js';
 const _quadMesh = /*@__PURE__*/ new QuadMesh();
 // The kernel never changes at runtime, so it is baked into the shader as
 // literals rather than read back from a uniform array inside the loop.
@@ -75,6 +74,7 @@ class GTVBAODenoiseNode extends TempNode {
 		this.index = uniform( 0 );
 		this.updateBeforeType = NodeUpdateType.FRAME;
 		this._resolution = uniform( new Vector2() );
+		this._isOrthographicCamera = camera.isOrthographicCamera === true;
 		this._cameraProjectionMatrixInverse = uniform( camera.projectionMatrixInverse );
 		this._cameraNear = reference( 'near', 'float', camera );
 		this._cameraFar = reference( 'far', 'float', camera );
@@ -131,7 +131,7 @@ class GTVBAODenoiseNode extends TempNode {
 	}
 	setup( builder ) {
 		this._fragmentContext = builder.getSharedContext();
-		this._logarithmicDepthBuffer = builder.renderer.logarithmicDepthBuffer === true;
+		this._logarithmicDepthBuffer = builder.renderer.logarithmicDepthBuffer === true && ! this._isOrthographicCamera;
 		this._refreshMaterialFragmentNode();
 		return this._textureNode.r;
 	}
@@ -152,11 +152,11 @@ class GTVBAODenoiseNode extends TempNode {
 		const maxDepthTexel = depthResolution.sub( 1 ).toConst();
 		const linearDepthNode = this._fragmentLinearDepthNode;
 		const aoResolution = linearDepthNode === null ? null : vec2( textureSize( linearDepthNode, 0 ) ).toConst();
-		const viewPositionFromLinearDepth = linearDepthNode === null ? null : createPerspectiveViewPositionFromLinearDepth( this._cameraProjectionMatrixInverse );
+		const viewPositionFromLinearDepth = linearDepthNode === null ? null : createViewPositionFromLinearDepth( this._cameraProjectionMatrixInverse, this._isOrthographicCamera );
 		// Level-0 texels stand for the scene-depth texel selected by this expression
 		// (shared with the prefilter), so reconstruct at that texel's center.
 		const viewPositionAt = ( sampleUv, depth ) => {
-			if ( linearDepthNode === null ) return getPerspectiveViewPosition( sampleUv, depth, this._cameraProjectionMatrixInverse );
+			if ( linearDepthNode === null ) return getViewPosition( sampleUv, depth, this._cameraProjectionMatrixInverse, this._isOrthographicCamera );
 			const aoTexel = min( floor( sampleUv.mul( aoResolution ) ), aoResolution.sub( 1 ) ).toConst();
 			const sourceTexel = depthTexelOfAoTexel( aoTexel, depthResolution, aoResolution );
 			const sourceUv = sourceTexel.add( 0.5 ).div( depthResolution );
@@ -167,16 +167,16 @@ class GTVBAODenoiseNode extends TempNode {
 		// expand each fetch into a wrap function plus clamp. The min keeps a UV of
 		// exactly 1 (from the clamped neighbor UVs) on the last texel, matching
 		// the sampler path's clamp-to-edge.
-		const loadDepth = ( sampleUv ) => {
-			const depth = this.depthNode.load( ivec2( min( floor( sampleUv.mul( depthResolution ) ), maxDepthTexel ) ) ).x;
+		const convertDepth = ( depth ) => {
 			if ( this._logarithmicDepthBuffer ) {
 				const viewZ = logarithmicDepthToViewZ( depth, this._cameraNear, this._cameraFar );
 				return viewZToPerspectiveDepth( viewZ, this._cameraNear, this._cameraFar );
 			}
 			return depth;
 		};
+		const loadDepth = ( sampleUv ) => convertDepth( this.depthNode.load( ivec2( min( floor( sampleUv.mul( depthResolution ) ), maxDepthTexel ) ) ).r );
 		const sampleNormal = ( sampleUv ) => {
-			if ( this.normalNode === null ) return getNormalFromDepth( sampleUv, this.depthNode.value, this._cameraProjectionMatrixInverse );
+			if ( this.normalNode === null ) return getDepthNormal( sampleUv, this.depthNode, this._cameraProjectionMatrixInverse, this._isOrthographicCamera, convertDepth );
 			const normal = this.normalNode.sample( sampleUv ).rgb;
 			return this._normalEncoding === 'directionToColor' ? normal.mul( 2 ).sub( 1 ).normalize() : normal.normalize();
 		};

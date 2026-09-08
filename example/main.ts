@@ -27,7 +27,8 @@ import {
 import { createScene } from "./scene.js";
 import { createGui } from "./gui.js";
 import { createFpsStats } from "./stats.js";
-import { createPresentation, setCameraView, updateCameraProjection, updatePresentation } from "./presentation.js";
+import { createExampleCamera, updateCameraProjection } from "./camera.js";
+import { createPresentation, setCameraView, updatePresentation } from "./presentation.js";
 
 type PassNode = ReturnType<typeof pass>;
 type TraaNode = ReturnType<typeof traa> & { setSize(width: number, height: number): void };
@@ -46,7 +47,8 @@ export interface ViewSettings {
   autoLighting: boolean;
 }
 
-const forceWebGL = new URLSearchParams(window.location.search).get("backend") === "webgl";
+const params = new URLSearchParams(window.location.search);
+const forceWebGL = params.get("backend") === "webgl";
 const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL });
 // Keep the full-resolution AO affordable on very dense displays.
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -64,11 +66,9 @@ try {
 }
 const backendName = renderer.coordinateSystem === THREE.WebGPUCoordinateSystem ? "WEBGPU" : "WEBGL2";
 
-const camera = new THREE.PerspectiveCamera(
-  38,
+const camera = createExampleCamera(
+  params.get("camera") === "orthographic" ? "orthographic" : "perspective",
   window.innerWidth / window.innerHeight,
-  0.1,
-  100
 );
 camera.position.set(11, 9, 14);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -76,6 +76,8 @@ controls.target.set(0, 1, 0);
 controls.enableDamping = true;
 controls.minDistance = 4;
 controls.maxDistance = 42;
+controls.minZoom = 0.35;
+controls.maxZoom = 5;
 controls.maxPolarAngle = Math.PI / 2 - 0.06;
 controls.autoRotateSpeed = 0.4;
 setCameraView("overview", camera, controls);
@@ -231,8 +233,7 @@ const gui = createGui({ renderer, sun, aoNode, denoiseNode, settings, applyPrese
 const updateCamera = createPresentation({ camera, controls, gui, settings, aoNode, syncOutput });
 
 window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  updateCameraProjection(camera);
+  updateCameraProjection(camera, window.innerWidth / window.innerHeight);
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 

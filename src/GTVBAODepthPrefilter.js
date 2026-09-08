@@ -9,6 +9,7 @@ import {
 	logarithmicDepthToViewZ,
 	max,
 	min,
+	orthographicDepthToViewZ,
 	perspectiveDepthToViewZ,
 	storageTexture,
 	texture,
@@ -89,8 +90,9 @@ const filterFrom = ( constants, load, texelX, texelY ) => {
 // call, so a resize only reallocates textures; shaders compile once per depth
 // mode on either backend.
 class GTVBAODepthPrefilter {
-	constructor( depthNode, cameraNear, cameraFar, depthRange ) {
+	constructor( depthNode, cameraNear, cameraFar, depthRange, isOrthographicCamera = false ) {
 		this._depthNode = depthNode;
+		this._isOrthographicCamera = isOrthographicCamera;
 		this._cameraNear = cameraNear;
 		this._cameraFar = cameraFar;
 		this._depthRange = depthRange;
@@ -183,6 +185,7 @@ class GTVBAODepthPrefilter {
 		this._textures = [];
 	}
 	_linearDepth( depth ) {
+		if ( this._isOrthographicCamera ) return orthographicDepthToViewZ( depth, this._cameraNear, this._cameraFar ).negate();
 		const viewZ = this._logarithmicDepthBuffer
 			? logarithmicDepthToViewZ( depth, this._cameraNear, this._cameraFar )
 			: perspectiveDepthToViewZ( depth, this._cameraNear, this._cameraFar );

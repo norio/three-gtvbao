@@ -1,6 +1,6 @@
 import { Fn, If, abs, clamp, dot, float, floor, fract, ivec2, logarithmicDepthToViewZ, textureSize, vec2 } from 'three/tsl';
 import { depthTexelOfAoTexel } from './GTVBAODepthPrefilter.js';
-import { createPerspectiveViewPositionFromLinearDepth, getPerspectiveViewPosition } from './GTVBAOViewSpace.js';
+import { createViewPositionFromLinearDepth, getViewPosition } from './GTVBAOViewSpace.js';
 
 // A neighbor AO texel counts as the same surface when its reconstructed point
 // lies within this many AO-texel footprints (the world size of one AO texel at
@@ -39,14 +39,15 @@ export function createGtvbaoDepthAwareAo( aoNode, aoTexture, { screenUv, viewPos
 			const aoResolution = vec2( textureSize( linearDepthTexture, 0 ) ).toConst();
 			const depthResolution = vec2( textureSize( aoNode.depthNode, 0 ) ).toConst();
 			const maxTexel = aoResolution.sub( 1 ).toConst();
-			const viewPositionFromLinearDepth = createPerspectiveViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse );
+			const viewPositionFromLinearDepth = createViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera );
 			// AO texel space with texel centers on integers: floor is the lower-left
 			// of the 2x2 footprint and fract the bilinear weights.
 			const footprint = screenUv.mul( aoResolution ).sub( 0.5 ).toConst();
 			const base = floor( footprint ).toConst();
 			const blend = fract( footprint ).toConst();
-			// One AO texel spans z / (2 halfProjScale) in world units at depth z.
-			const tolerance = viewPosition.z.negate().mul( PLANE_TOLERANCE_TEXELS / 2 ).div( aoNode._halfProjScale ).add( 1e-4 ).toConst();
+			// Orthographic texel footprints stay constant with view depth.
+			const footprintDepth = aoNode._isOrthographicCamera ? float( 1 ) : viewPosition.z.negate();
+			const tolerance = footprintDepth.mul( PLANE_TOLERANCE_TEXELS / 2 ).div( aoNode._halfProjScale ).add( 1e-4 ).toConst();
 			const aoSum = float( 0 ).toVar();
 			const weightSum = float( 0 ).toVar();
 			const cornerAo = [];
@@ -84,14 +85,14 @@ export function createGtvbaoDepthAwareAoFromBuffers( aoNode, aoTexture, depthTex
 	const viewPosition = Fn( ( builder ) => {
 		const depth = depthTexture.sample( screenUv ).r;
 		// This helper can be called before aoNode.setup() knows the depth mode.
-		if ( builder.renderer.logarithmicDepthBuffer === true ) {
+		if ( builder.renderer.logarithmicDepthBuffer === true && ! aoNode._isOrthographicCamera ) {
 			const viewZ = logarithmicDepthToViewZ( depth, aoNode._cameraNear, aoNode._cameraFar );
 			// Keep logarithmic depth's range instead of squeezing it back into
 			// perspective depth, which would lose precision on distant surfaces.
-			const fromLinearDepth = createPerspectiveViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse );
+			const fromLinearDepth = createViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera );
 			return fromLinearDepth( screenUv, viewZ.negate() );
 		}
-		return getPerspectiveViewPosition( screenUv, depth, aoNode._cameraProjectionMatrixInverse );
+		return getViewPosition( screenUv, depth, aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera );
 	} )();
 	const normal = normalTexture.sample( screenUv ).rgb;
 	const viewNormal = aoNode.normalEncoding === 'directionToColor' ? normal.mul( 2 ).sub( 1 ).normalize() : normal.normalize();

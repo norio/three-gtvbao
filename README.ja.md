@@ -25,7 +25,7 @@ three.js の `SSGINode` の AO 経路と `DenoiseNode` をベースに、Mirko S
 - three.js **r184** 以上 (`three/webgpu` と `three/tsl`)。このソース版は **0.184.0 と 0.185.1** の WebGPU / WebGL2 で検証済みです。[照明の互換性検証](docs/r185-lighting-regression.md)を参照してください。
 - `WebGPURenderer` の WebGPU / WebGL2 バックエンド。従来の `WebGLRenderer` は非対応です。
 - WebGL2 を使う場合は `EXT_color_buffer_float`。
-- `PerspectiveCamera`。
+- `PerspectiveCamera` または `OrthographicCamera`。
 
 ## インストール
 
@@ -35,7 +35,7 @@ npm install three three-gtvbao
 
 ## クイックスタート
 
-初期化済みの `WebGPURenderer`、`scene`、透視投影の `camera` を用意してください。
+初期化済みの `WebGPURenderer`、`scene`、透視投影または平行投影の `camera` を用意してください。
 不透明プリパスが深度と法線を出力し、ライティングパスが `MeshStandardNodeMaterial` など
 three.js の AO フックを使うマテリアルに AO を適用します。Unlit マテリアルには影響しません。
 
@@ -129,7 +129,7 @@ pipeline.outputNode = scenePass;
 ### `gtvbao(depthNode, normalNode, camera, options?)`
 
 `new GTVBAONode(...)` でも作成できます。プリパスの深度テクスチャノード、view 空間法線の
-テクスチャノード (深度から法線を再構成する場合は `null`)、`PerspectiveCamera` を渡します。
+テクスチャノード (深度から法線を再構成する場合は `null`)、`PerspectiveCamera` または `OrthographicCamera` を渡します。
 対数深度バッファにも対応しています。`options` には下記プロパティの初期値を指定できます。
 
 既定値はプリセット適用前のコンストラクタの値です。`plain` は直接代入し、`uniform` / `variant` は
@@ -168,6 +168,13 @@ pipeline.outputNode = scenePass;
 | `batchVariantChanges(fn)` | 複数の変種変更を 1 回の再構築にまとめる。 |
 | `setSize(width, height)` | 描画バッファサイズで自動的に呼ばれる。 |
 | `dispose()` | ノードの描画先、マテリアル、深度プリフィルタを解放する。 |
+
+どちらのカメラも同じ API で、デノイズ・深度 MIP・深度を考慮したアップサンプリングを
+利用できます。深度・法線バッファを描画したカメラを渡してください。zoom や表示範囲を
+変更した後は、通常どおり `camera.updateProjectionMatrix()` を呼び出します。
+平行投影でワールド空間サンプリング (`useScreenSpaceSampling: false`) を使うと、
+画面上の探索半径は深度に依存しません。`useLinearThickness` は引き続き view 深度に
+応じて厚みを変える設定です。ワールド空間で一定の厚みにする場合は `false` にします。
 
 ### `gtvbaoDenoise(aoTexture, depthNode, normalNode, camera, options?)`
 
@@ -218,6 +225,10 @@ Vite が表示するローカル URL (通常は `http://localhost:5173`) を開�
 
 `npm test` には tree shaking の検証も含まれます。単独で実行する場合は `npm run test:treeshake` を使います。
 ブラウザでの GPU 検証は別途実施します。[WebGPU / WebGL2 回帰テスト](test/webgpu/README.md) を参照してください。
+
+**Projection** で Perspective / Orthographic を切り替えられます。切り替えると
+サンプルを再読み込みします。`?camera=orthographic` で直接開くこともでき、
+`&backend=webgl` と併用できます。どちらも構図の切り替え、回転・ズームに対応します。
 
 サンプルは `master` への push 後に [GitHub Actions](.github/workflows/ci.yml) で
 GitHub Pages に自動公開されます。Pages 向けのビルドコマンドは

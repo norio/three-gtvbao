@@ -1,6 +1,6 @@
 {
   "name": "three-gtvbao",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "GT-VBAO ambient occlusion for three.js WebGPU and WebGL2 (TSL): visibility-bitmask AO with the GT-VBAO corrections, a depth-MIP prefilter, a denoiser and a depth-aware upsample",
   "type": "module",
   "license": "MIT",

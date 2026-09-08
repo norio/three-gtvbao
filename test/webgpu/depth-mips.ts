@@ -14,6 +14,7 @@ const NEAR = 1;
 const FAR = 100;
 const RANGE = 2;
 const TOLERANCE = 2e-4;
+const orthographic = new URLSearchParams(location.search).get("camera") === "orthographic";
 const sizes: Size[] = [
   { width: 31, height: 19, depthWidth: 62, depthHeight: 57 },
   { width: 10, height: 7, depthWidth: 23, depthHeight: 21 },
@@ -36,14 +37,17 @@ function fixture(size: Size, logarithmic: boolean, revision: number) {
     const distance = revision === 0
       ? 2 + x * 0.031 + y * 0.019 + (x > size.depthWidth / 2 ? 3 : 0)
       : 8 - x * 0.023 - y * 0.011 + (y < size.depthHeight / 2 ? 2 : 0);
-    return logarithmic ? Math.log(distance / NEAR) / Math.log(FAR / NEAR)
+    return orthographic ? (distance - NEAR) / (FAR - NEAR)
+      : logarithmic ? Math.log(distance / NEAR) / Math.log(FAR / NEAR)
       : FAR * (distance - NEAR) / (distance * (FAR - NEAR));
   });
   const source = new THREE.DataTexture(encoded, size.depthWidth, size.depthHeight, THREE.RedFormat, THREE.FloatType);
   source.needsUpdate = true;
   // Decode the actual f32 fixture, so encoding roundoff is not blamed on the
   // production shader's linear-depth conversion.
-  const linear = Array.from(encoded, depth => logarithmic
+  const linear = Array.from(encoded, depth => orthographic
+    ? NEAR + depth * (FAR - NEAR)
+    : logarithmic
     ? NEAR * Math.pow(FAR / NEAR, depth)
     : NEAR * FAR / (FAR + depth * (NEAR - FAR)));
   return { source, linear };
@@ -90,7 +94,9 @@ async function run() {
   renderer.setSize(64, 64);
   await renderer.init();
   assertBackend(renderer);
-  const camera = new THREE.PerspectiveCamera(55, 1, NEAR, FAR);
+  const camera = orthographic
+    ? new THREE.OrthographicCamera(-4, 4, 4, -4, NEAR, FAR)
+    : new THREE.PerspectiveCamera(55, 1, NEAR, FAR);
   const placeholder = new THREE.DataTexture(new Float32Array([0]), 1, 1, THREE.RedFormat, THREE.FloatType);
   const depthNode = texture(placeholder);
   const ao = new GTVBAONode(depthNode, null, camera, { useDepthMips: true });
@@ -128,7 +134,7 @@ async function run() {
         }
       }
     }
-    return { backend: requestedBackend, tolerance: TOLERANCE, passed: results.every(entry => entry.passed), results };
+    return { backend: requestedBackend, camera: orthographic ? "orthographic" : "perspective", tolerance: TOLERANCE, passed: results.every(entry => entry.passed), results };
   } finally {
     ao.dispose();
     placeholder.dispose();

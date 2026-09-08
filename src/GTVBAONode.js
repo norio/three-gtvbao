@@ -1,5 +1,4 @@
 import {
-	MathUtils,
 	NodeMaterial,
 	NodeUpdateType,
 	QuadMesh,
@@ -80,7 +79,8 @@ class GTVBAONode extends TempNode {
 		this._cameraNear = reference( 'near', 'float', camera );
 		this._cameraFar = reference( 'far', 'float', camera );
 		this._camera = camera;
-		this._depthPrefilter = new GTVBAODepthPrefilter( this.depthNode, this._cameraNear, this._cameraFar, this.maxThickness );
+		this._isOrthographicCamera = camera.isOrthographicCamera === true;
+		this._depthPrefilter = new GTVBAODepthPrefilter( this.depthNode, this._cameraNear, this._cameraFar, this.maxThickness, this._isOrthographicCamera );
 		this._aoRenderTarget = createGtvbaoRenderTarget( GTVBAO_PASS_NAMES.ao, RedFormat );
 		this._debugRenderTarget = createGtvbaoRenderTarget( GTVBAO_PASS_NAMES.debug, RGBAFormat );
 		this._material = new NodeMaterial();
@@ -92,7 +92,7 @@ class GTVBAONode extends TempNode {
 		// GTVBAODenoiseNode sizes itself from this texture, so denoising intentionally
 		// runs at AO resolution (its radius is in AO texels) before the bilinear upscale.
 		this._textureNode = passTexture( this, this._aoRenderTarget.texture );
-		this._lastSize = { aoWidth: 0, aoHeight: 0, fov: - 1, targetIsDebug: null };
+		this._lastSize = { aoWidth: 0, aoHeight: 0, projectionScale: - 1, targetIsDebug: null };
 	}
 	setVariantChangeCallback( callback ) {
 		this._onVariantChange = callback;
@@ -159,23 +159,23 @@ class GTVBAONode extends TempNode {
 		const aoWidth = Math.max( 1, Math.round( width * this.resolutionScale ) );
 		const aoHeight = Math.max( 1, Math.round( height * this.resolutionScale ) );
 		this._depthPrefilter.setSize( aoWidth, aoHeight, width, height );
-		const fov = this._camera.fov;
+		const projectionScale = this._camera.projectionMatrix.elements[ 5 ];
 		const last = this._lastSize;
 		if (
 			last.aoWidth === aoWidth &&
 			last.aoHeight === aoHeight &&
-			last.fov === fov &&
+			last.projectionScale === projectionScale &&
 			last.targetIsDebug === targetIsDebug
 		) return;
 		last.aoWidth = aoWidth;
 		last.aoHeight = aoHeight;
-		last.fov = fov;
+		last.projectionScale = projectionScale;
 		last.targetIsDebug = targetIsDebug;
 		this._resolution.value.set( aoWidth, aoHeight );
 		renderTarget.setSize( aoWidth, aoHeight );
 		const inactiveRenderTarget = targetIsDebug ? this._aoRenderTarget : this._debugRenderTarget;
 		if ( inactiveRenderTarget.width !== 1 || inactiveRenderTarget.height !== 1 ) inactiveRenderTarget.setSize( 1, 1 );
-		this._halfProjScale.value = aoHeight / ( Math.tan( fov * MathUtils.DEG2RAD * 0.5 ) * 2 ) * 0.5;
+		this._halfProjScale.value = aoHeight * projectionScale * 0.25;
 	}
 	updateBefore( frame ) {
 		const { renderer } = frame;
@@ -205,7 +205,7 @@ class GTVBAONode extends TempNode {
 		RendererUtils.restoreRendererState( renderer, _rendererState );
 	}
 	setup( builder ) {
-		this._logarithmicDepthBuffer = builder.renderer.logarithmicDepthBuffer === true;
+		this._logarithmicDepthBuffer = builder.renderer.logarithmicDepthBuffer === true && ! this._isOrthographicCamera;
 		this._depthPrefilter.setLogarithmicDepthBuffer( this._logarithmicDepthBuffer );
 		this._fragmentContext = builder.getSharedContext();
 		this._refreshMaterialFragmentNode();

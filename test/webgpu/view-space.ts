@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import { Fn, getViewPosition, int, ivec2, length, screenCoordinate, texture, uniform, vec2, vec4 } from "three/tsl";
 import {
+  createTexelViewPosition, createViewPositionFromLinearDepth, getViewPosition as getGtvbaoViewPosition,
   createPerspectiveTexelViewPosition, createPerspectiveViewPositionFromLinearDepth, getPerspectiveViewPosition,
 } from "../../src/GTVBAOViewSpace.js";
 import { renderProbe } from "./backend.js";
@@ -11,8 +12,17 @@ const TOLERANCE = 2e-4;
 
 export async function checkViewPositions(renderer: THREE.WebGPURenderer) {
   const results = [];
-  for (const offset of [false, true]) {
-    const camera = new THREE.PerspectiveCamera(67, WIDTH / HEIGHT, 0.1, 300);
+  const cameras = [
+    new THREE.PerspectiveCamera(67, WIDTH / HEIGHT, 0.1, 300),
+    ...[1, 2.5].map(zoom => {
+      const camera = new THREE.OrthographicCamera(-5, 3, 4, -2, 0.1, 300);
+      camera.zoom = zoom;
+      return camera;
+    }),
+  ];
+  for (const baseCamera of cameras) for (const offset of [false, true]) {
+    const camera = baseCamera.clone();
+    const orthographic = camera instanceof THREE.OrthographicCamera;
     camera.coordinateSystem = renderer.coordinateSystem;
     if (offset) camera.setViewOffset(WIDTH * 2, HEIGHT * 2, 17, 23, WIDTH, HEIGHT);
     camera.updateProjectionMatrix();
@@ -41,11 +51,14 @@ export async function checkViewPositions(renderer: THREE.WebGPURenderer) {
           const inverse = uniform(camera.projectionMatrixInverse);
           const reference = getViewPosition(fixture.xy, fixture.z, inverse).toConst();
           const actual = (mode === "uv-depth"
-            ? getPerspectiveViewPosition(fixture.xy, fixture.z, inverse)
+            ? orthographic ? getGtvbaoViewPosition(fixture.xy, fixture.z, inverse, true)
+              : getPerspectiveViewPosition(fixture.xy, fixture.z, inverse)
             : mode === "texel-depth"
-              ? createPerspectiveTexelViewPosition(inverse, vec2(1 / WIDTH, 1 / HEIGHT))(
+              ? (orthographic ? createTexelViewPosition(inverse, vec2(1 / WIDTH, 1 / HEIGHT), true)
+                : createPerspectiveTexelViewPosition(inverse, vec2(1 / WIDTH, 1 / HEIGHT)))(
                 fixture.xy.mul(vec2(WIDTH, HEIGHT)).sub(0.5), fixture.z)
-              : createPerspectiveViewPositionFromLinearDepth(inverse)(fixture.xy, fixture.w)).toConst();
+              : (orthographic ? createViewPositionFromLinearDepth(inverse, true)
+                : createPerspectiveViewPositionFromLinearDepth(inverse))(fixture.xy, fixture.w)).toConst();
           return vec4(actual, length(actual.sub(reference)));
         })();
         const pixels = await renderProbe(renderer, probe, fixtures.length);
@@ -69,7 +82,7 @@ export async function checkViewPositions(renderer: THREE.WebGPURenderer) {
           });
         });
         const cases = fixtures.length * 2;
-        results.push({ label: `view position / ${offset ? "view-offset" : "centered"} / ${mode}`,
+        results.push({ label: `view position / ${orthographic ? "orthographic" : "perspective"} / zoom ${camera.zoom} / ${offset ? "view-offset" : "centered"} / ${mode}`,
           cases, maxError, rmse: Math.sqrt(squaredError / cases), tolerance: TOLERANCE,
           failures, worstCase, passed: failures === 0 });
       }

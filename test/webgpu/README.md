@@ -9,8 +9,9 @@ have no rendering errors.
 | --- | --- | --- |
 | `/test/webgpu/depth-mips.html` | 270 depth-MIP cases against a CPU reference | `window.depthMipRegression` |
 | `/test/webgpu/upsample.html` | 14 depth-aware upsample cases | `window.upsampleRegression` |
-| `/test/webgpu/math.html` | 12,720 shader comparisons against independent references | `window.mathRegression` |
+| `/test/webgpu/math.html` | 15,120 shader comparisons against independent references | `window.mathRegression` |
 | `/test/webgpu/lighting.html` | Constant-AO lighting against an independent reference | `window.lightingRegression` |
+| `/test/webgpu/orthographic.html` | 8 camera-distance invariance scenarios | `window.orthographicRegression` |
 | `/test/webgpu/example.html` | 39 display/pass-order and lighting-image scenarios in the production example | `window.exampleRegression` |
 
 Wait for the completion result before reading it; require `passed === true`.
@@ -47,7 +48,7 @@ The result also provides output hashes for comparison with a prior checkout.
 ## Shader math
 
 One renderer executes the production CDF, slice-direction and view-position
-helpers in ten draws with FloatType readback. The CDF uses three sector measures, both march
+helpers in 22 draws with FloatType readback. The CDF uses three sector measures, both march
 directions and asymmetric horizon pairs, including poles, hemisphere boundaries
 and values beyond those boundaries. Its reference numerically integrates the
 hemisphere density; it does not copy the production closed form or approximate
@@ -60,11 +61,35 @@ tolerance and worst case. No JS mirror of the production formula is tested.
 
 View-position probes compare all three reconstruction helpers (UV/depth,
 texel/depth, UV/linear depth) with three.js `getViewPosition` and an independent
-CPU matrix inverse. Both centered and view-offset perspective cameras sample
-image corners, interior pixels, and distances from 0.11 to 100. Relative error
+CPU matrix inverse. Perspective and orthographic cameras sample image corners,
+interior pixels, and distances from 0.11 to 100. Orthographic probes use an
+asymmetric frustum, zoom 1 and 2.5, and centered/view-offset projections. Relative error
 must remain below `2e-4`, including each backend's projection depth convention.
 
+## Orthographic cameras
+
+`orthographic.html` compares actual raw AO and denoised/upsampled GPU output for
+a rectangular depth step at camera distances 3 and 13, with a zero near plane. Parallel projection must
+preserve both images within `2/255`. The input depths are produced by the
+three.js camera projection matrix using binary-exact fixture depths to isolate
+camera translation from floating-point sector-boundary rounding. Nonfinite values, out-of-range AO and missing
+occlusion also fail. Variants cover world/screen radius, depth MIPs on/off,
+full/half resolution, and supplied/depth-derived normals, with the renderer
+logarithmic-depth option both off and on. The default distance-scaled thickness
+is explicitly disabled because that option intentionally depends on view depth.
+
+Append `?camera=orthographic` to `depth-mips.html` and `upsample.html` to exercise
+the existing numerical references with linear orthographic scene depth, including
+when the renderer logarithmic-depth flag is on. Append `&backend=webgl` for
+WebGL2. The dedicated AO page and `math.html` use `?backend=webgl`. Results are
+available as `window.orthographicRegression`, `window.depthMipRegression`,
+`window.upsampleRegression`, and `window.mathRegression`.
+
 ## Example graph
+
+Run `example.html?camera=orthographic` as well as the default perspective mode.
+Use `&backend=webgl` to run its 39 scenarios on WebGL2. Both exercise the
+production example with the same AO, denoising, TRAA, and lighting checks.
 
 The page imports the actual example, freezes its camera and animation, and uses
 fixed denoiser noise. Each scenario runs five native frames. The last frame's

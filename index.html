@@ -37,6 +37,13 @@
         <button data-camera="arcade" aria-pressed="false">Arcade</button>
         <button data-camera="detail" aria-pressed="false">Detail</button>
       </div>
+      <label class="projection-control" for="projection">
+        <span class="toolbar-label">Projection</span>
+        <select id="projection" aria-label="Projection">
+          <option value="perspective">Perspective</option>
+          <option value="orthographic">Orthographic</option>
+        </select>
+      </label>
       <div class="utility-controls">
         <button id="rotate" aria-pressed="false">Auto rotate</button>
         <button id="auto-lighting" aria-pressed="false" title="Slowly orbit the light; turn off to pause">Auto lighting</button>

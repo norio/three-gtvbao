@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>GTVBAO orthographic regression</title>
+  <style>
+    body { margin: 24px; font: 14px system-ui; background: #181818; color: #eee; }
+    pre { white-space: pre-wrap; }
+    section { display: inline-block; margin: 0 24px 24px 0; }
+    canvas { width: 384px; height: 192px; image-rendering: pixelated; }
+  </style>
+  <h1>GTVBAO orthographic regression</h1>
+  <p>Raw AO / denoised and upsampled AO. Moving the camera along its view axis must preserve both.</p>
+  <div id="images"></div>
+  <pre id="status">Running…</pre>
+  <script type="module" src="./orthographic.ts"></script>
+</html>

@@ -1,4 +1,4 @@
-import type { PerspectiveCamera } from "three";
+import type { OrthographicCamera, PerspectiveCamera } from "three";
 import type { Node, TempNode, TextureNode, UniformNode } from "three/webgpu";
 import type GTVBAONode from "./GTVBAONode.js";
 import type { GTVBAONormalEncoding } from "./GTVBAONode.js";
@@ -33,7 +33,7 @@ export default class GTVBAODenoiseNode extends TempNode<"float"> {
     textureNode: SampleableTextureNode,
     depthNode: SampleableTextureNode,
     normalNode: SampleableTextureNode | null,
-    camera: PerspectiveCamera,
+    camera: PerspectiveCamera | OrthographicCamera,
     options?: GTVBAODenoiseOptions
   );
   dispose(): void;
@@ -43,6 +43,6 @@ export function gtvbaoDenoise(
   node: Node,
   depthNode: Node,
   normalNode: Node | null,
-  camera: PerspectiveCamera,
+  camera: PerspectiveCamera | OrthographicCamera,
   options?: GTVBAODenoiseOptions
 ): GTVBAODenoiseNode;

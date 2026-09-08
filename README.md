@@ -25,7 +25,7 @@ The active backend is shown in the demo; [force WebGL2](https://norio.github.io/
 - three.js **r184** or newer (`three/webgpu` and `three/tsl`). This source revision is verified with **0.184.0 and 0.185.1** on WebGPU and WebGL2; see the [lighting compatibility regression](docs/r185-lighting-regression.md).
 - `WebGPURenderer` with its WebGPU or WebGL2 backend; the legacy `WebGLRenderer` is unsupported.
 - `EXT_color_buffer_float` when using WebGL2.
-- A `PerspectiveCamera`.
+- A `PerspectiveCamera` or `OrthographicCamera`.
 
 ## Install
 
@@ -35,7 +35,7 @@ npm install three three-gtvbao
 
 ## Quick start
 
-Start with an initialized `WebGPURenderer`, a `scene` and a perspective `camera`.
+Start with an initialized `WebGPURenderer`, a `scene` and a perspective or orthographic `camera`.
 The opaque pre-pass provides depth and normals; the lit pass applies AO to materials that use
 three.js's AO lighting hook, such as `MeshStandardNodeMaterial`. Unlit materials are unaffected.
 
@@ -129,7 +129,7 @@ denoising presets need the denoiser's output connected as above.
 ### `gtvbao(depthNode, normalNode, camera, options?)`
 
 Also available as `new GTVBAONode(...)`. Pass a pre-pass depth texture node, a view-space normal
-texture node (or `null` to reconstruct normals from depth), and a `PerspectiveCamera`.
+texture node (or `null` to reconstruct normals from depth), and a `PerspectiveCamera` or `OrthographicCamera`.
 Logarithmic depth buffers are supported. `options` accepts initial values for the properties below.
 
 Defaults here are constructor defaults, before applying a preset. Set `plain` properties directly
@@ -168,6 +168,13 @@ and `uniform` / `variant` properties through `.value`. Variant changes can rebui
 | `batchVariantChanges(fn)` | Apply multiple variant changes with one rebuild. |
 | `setSize(width, height)` | Called automatically with the drawing buffer size. |
 | `dispose()` | Release the node's render targets, materials and depth prefilter. |
+
+Both camera types use the same API, including denoising, depth MIPs and depth-aware
+upsampling. Pass the same camera used to render the depth/normal buffers. After
+changing zoom or the frustum, call `camera.updateProjectionMatrix()` as usual.
+With an orthographic camera, world-space sampling (`useScreenSpaceSampling: false`)
+has a depth-independent screen radius. `useLinearThickness` still explicitly scales
+thickness with view depth; set it to `false` for constant world-space thickness.
 
 ### `gtvbaoDenoise(aoTexture, depthNode, normalNode, camera, options?)`
 
@@ -219,6 +226,10 @@ shows the active backend; append `?backend=webgl` to force WebGL2. In your app, 
 
 `npm test` includes the tree-shaking checks; `npm run test:treeshake` runs those alone.
 Browser GPU checks are separate: see [WebGPU / WebGL2 regressions](test/webgpu/README.md).
+
+Use the **Projection** selector to choose Perspective or Orthographic. Switching
+projection reloads the example; `?camera=orthographic` opens it directly, and can
+be combined with `&backend=webgl`. Camera views and orbit/zoom work in both modes.
 
 The example is published to GitHub Pages by [GitHub Actions](.github/workflows/ci.yml)
 after each push to `master`. The Pages build uses `npm run build -- --base=/three-gtvbao/`

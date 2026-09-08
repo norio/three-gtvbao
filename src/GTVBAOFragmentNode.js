@@ -12,7 +12,6 @@ import {
 	float,
 	floor,
 	fract,
-	getNormalFromDepth,
 	interleavedGradientNoise,
 	inverseSqrt,
 	ivec2,
@@ -36,11 +35,12 @@ import {
 	vec4,
 	viewZToPerspectiveDepth
 } from 'three/tsl';
+import { getDepthNormal } from './GTVBAODepthNormal.js';
 import { GTVBAO_DEBUG_MODE_OPTIONS } from './GTVBAODebugModes.js';
 import { createHorizonRemap } from './GTVBAOHorizonRemap.js';
 import { GTVBAO_DEPTH_MIP_COUNT, depthTexelOfAoTexel } from './GTVBAODepthPrefilter.js';
 import { createViewVectorFrame, projectSliceDirection } from './GTVBAOSliceDirection.js';
-import { createPerspectiveTexelViewPosition, createPerspectiveViewPositionFromLinearDepth, getPerspectiveViewPosition } from './GTVBAOViewSpace.js';
+import { createTexelViewPosition, createViewPositionFromLinearDepth, getViewPosition } from './GTVBAOViewSpace.js';
 export const isAoIntensityFastPath = ( value ) => Math.abs( value - 1 ) < 1e-6;
 export const isExpFactorFastPath = ( value ) => Math.abs( value - 2 ) < 1e-6;
 // XeGTAO default: a horizon step this many pixels (in log2) away starts using
@@ -95,7 +95,7 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 	// (the texel is re-derived from the normal texture's own size in case it differs).
 	const loadNormal = ( sampleUv ) => {
 		if ( aoNode.normalNode === null ) {
-			return getNormalFromDepth( sampleUv, aoNode.depthNode.value, aoNode._cameraProjectionMatrixInverse );
+			return getDepthNormal( sampleUv, aoNode.depthNode, aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera, convertDepth );
 		}
 		const normalTexel = floor( sampleUv.mul( vec2( textureSize( aoNode.normalNode, 0 ) ) ) );
 		const normal = aoNode.normalNode.load( ivec2( normalTexel ) ).rgb;
@@ -143,22 +143,23 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 				const initialRayStep = createInitialRayStep();
 				return vec4( vec3( fract( aoNode._temporalDirection.mul( 6 ) ), fract( aoNode._temporalOffset ), fract( initialRayStep ) ), 1 );
 			}
-			const viewPositionFromLinearDepth = depthMips === null ? null : createPerspectiveViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse );
+			const viewPositionFromLinearDepth = depthMips === null ? null : createViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera );
 			const viewPosition = ( depthMips === null
-				? getPerspectiveViewPosition( surfaceUv, depth, aoNode._cameraProjectionMatrixInverse )
+				? getViewPosition( surfaceUv, depth, aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera )
 				: viewPositionFromLinearDepth( surfaceUv, loadLinearDepth( 0, aoTexel ) ) ).toVar();
 			const aoTexelSize = vec2( 1 ).div( aoNode._resolution ).toConst();
 			const centerThickness = effectiveThickness( viewPosition ).toConst();
 			if ( variant.debugMode === GTVBAO_DEBUG_MODE_OPTIONS.Thickness ) {
 				return vec4( vec3( centerThickness.div( aoNode.maxThickness.toConst() ).clamp() ), 1 );
 			}
-			const viewDir = viewPosition.negate().mul( inverseSqrt( dot( viewPosition, viewPosition ) ) ).toVar();
+			const viewDir = ( aoNode._isOrthographicCamera ? vec3( 0, 0, 1 )
+				: viewPosition.negate().mul( inverseSqrt( dot( viewPosition, viewPosition ) ) ) ).toVar();
 			const noiseDirection = interleavedGradientNoise( screenCoordinate );
 			// Slice angles are equally spaced (plus the per-pixel and per-frame
 			// rotation) around the view vector and projected to the screen (GT-VBAO,
 			// see GTVBAOSliceDirection.js); without perspective correction they are
 			// image-plane angles, as in VBAO, which is the same thing at the screen center.
-			const sliceFrame = variant.usePerspectiveCorrectSlice ? createViewVectorFrame( viewDir ) : null;
+			const sliceFrame = variant.usePerspectiveCorrectSlice && ! aoNode._isOrthographicCamera ? createViewVectorFrame( viewDir ) : null;
 			const toSliceDirection = ( direction ) => sliceFrame === null
 				? vec3( direction, 0 ).toConst()
 				: projectSliceDirection( sliceFrame, viewDir, direction );
@@ -191,14 +192,14 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 			}
 			const RADIUS = aoNode.radius.toConst();
 			// Slice- and direction-invariant: the horizon step radius only depends on
-			// the pixel's view depth, so hoist it out of the horizon marches.
+			// projection scale and, for perspective cameras, the pixel's view depth.
 			const stepRadiusBase = variant.useScreenSpaceSampling
 				? RADIUS.mul( aoNode._resolution.x.div( 2 ) ).div( float( 16 ) )
-				: max( RADIUS.mul( aoNode._halfProjScale ).div( viewPosition.z.negate() ), float( variant.stepCount ) );
+				: max( RADIUS.mul( aoNode._halfProjScale ).div( aoNode._isOrthographicCamera ? float( 1 ) : viewPosition.z.negate() ), float( variant.stepCount ) );
 			const stepRadius = stepRadiusBase.div( float( variant.stepCount + 1 ) );
 			const radiusVS = float( Math.max( 1, variant.stepCount - 1 ) ).mul( stepRadius ).toConst();
 			const initialRayStep = createInitialRayStep().toConst();
-			const getViewPositionFromTexel = createPerspectiveTexelViewPosition( aoNode._cameraProjectionMatrixInverse, depthTexelSize );
+			const getViewPositionFromTexel = createTexelViewPosition( aoNode._cameraProjectionMatrixInverse, depthTexelSize, aoNode._isOrthographicCamera );
 			const occlusion = float( 0 ).toVar();
 			// Cosine weighting integrates a different amount of the hemisphere per
 			// slice, so slices are averaged with their own integral as the weight.
@@ -349,7 +350,10 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 				? occlusion.div( max( sliceWeightSum, 1e-4 ) )
 				: occlusion.div( float( variant.sliceCount ) )
 			).clamp().toVar();
-			const ao = ( variant.aoIntensityIsOne ? occlusionRatio.oneMinus() : pow( occlusionRatio.oneMinus(), aoNode._aoIntensityNode.toConst() ) ).clamp().toVar();
+			// Strength zero must stay neutral even at full occlusion: GLSL pow(0, 0)
+			// is undefined and can otherwise produce isolated black texels.
+			const ao = ( variant.aoIntensityIsOne ? occlusionRatio.oneMinus()
+				: aoNode._aoIntensityNode.equal( 0 ).select( float( 1 ), pow( occlusionRatio.oneMinus(), aoNode._aoIntensityNode.toConst() ) ) ).clamp().toVar();
 			let outputColor = vec3( ao );
 			if ( variant.debugMode === GTVBAO_DEBUG_MODE_OPTIONS[ 'Bit Count' ] ) {
 				outputColor = vec3( occlusionRatio );

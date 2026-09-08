@@ -126,7 +126,7 @@ async function run() {
     const viewPositions = await checkViewPositions(renderer);
     const results = [...cdf.results, ...slices.results, ...viewPositions];
     return {
-      backend, passed: results.every(entry => entry.passed), drawCalls: 10,
+      backend, passed: results.every(entry => entry.passed), drawCalls: 4 + viewPositions.length,
       inputCases: { cdf: cdf.inputCases, slices: slices.inputCases },
       caseCount: results.reduce((sum, entry) => sum + entry.cases, 0), results,
     };

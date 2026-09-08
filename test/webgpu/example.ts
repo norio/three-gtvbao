@@ -4,6 +4,7 @@ import { GTVBAO_PASS_NAMES } from "../../src/index.js";
 import {
   renderer, scene, camera, controls, aoNode, denoiseNode, prePass, pipeline, settings, syncOutput,
 } from "../../example/main.js";
+import { getCameraAspect, updateCameraProjection } from "../../example/camera.js";
 import { setCameraView } from "../../example/presentation.js";
 
 import { assertBackend, readFloatTarget, reportProgress } from "./backend.js";
@@ -16,7 +17,7 @@ renderer.setAnimationLoop(null);
 document.querySelector(".lil-gui.root")?.remove();
 renderer.setPixelRatio(1);
 renderer.setSize(WIDTH, HEIGHT);
-camera.aspect = WIDTH / HEIGHT;
+updateCameraProjection(camera, WIDTH / HEIGHT);
 // Reapply the composition after fixing aspect: the public example initially
 // chooses its position and FOV from the browser window's dimensions.
 setCameraView("overview", camera, controls);
@@ -82,7 +83,7 @@ function showPixels(label: string, pixels: Float32Array) {
 
 function assertFiniteCamera(scenario: string) {
   const values = {
-    aspect: [camera.aspect],
+    aspect: [getCameraAspect(camera)],
     position: camera.position.toArray(),
     projection: camera.projectionMatrix.elements,
     projectionInverse: camera.projectionMatrixInverse.elements,
@@ -254,7 +255,7 @@ async function run() {
     results.push({ name: scenario.name, passed, observed, expected, maxDebugError, lighting, neutralAo, hash });
     if (["off-direct", "raw-lit", "ao-only", "debug-5"].includes(scenario.name)) showPixels(scenario.name, pixels);
   }
-  return { backend: backendName, passed: results.every(result => result.passed), results };
+  return { backend: backendName, camera: "isOrthographicCamera" in camera ? "orthographic" : "perspective", passed: results.every(result => result.passed), results };
 }
 
 try {

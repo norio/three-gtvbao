@@ -1,8 +1,12 @@
-import type { PerspectiveCamera, Vector3 } from "three/webgpu";
+import type { Vector3 } from "three/webgpu";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GUI } from "three/examples/jsm/libs/lil-gui.module.min.js";
 import type { GTVBAONode } from "../src/index.js";
 import type { ViewSettings } from "./main.js";
+import {
+  getCameraAspect, getCameraViewHeight, getFramedViewHeight,
+  setOrthographicViewHeight, updateCameraProjection, type ExampleCamera,
+} from "./camera.js";
 
 const views = {
   overview: { position: [13.73674, 6.22224, 17.72657], target: [0, 1, -0.1] },
@@ -27,22 +31,18 @@ function getCameraPosition(name: CameraView, aspect: number, position: Vector3) 
   }
 }
 
-export function updateCameraProjection(camera: PerspectiveCamera) {
-  // Preserve the horizontal composition on portrait screens without moving
-  // into the studio fog or beyond the orbit distance limit.
-  camera.fov = 2 * Math.atan(Math.tan(19 * Math.PI / 180) / Math.min(1, camera.aspect)) * 180 / Math.PI;
-  camera.updateProjectionMatrix();
-}
-
-export function setCameraView(name: CameraView, camera: PerspectiveCamera, controls: OrbitControls) {
+export function setCameraView(name: CameraView, camera: ExampleCamera, controls: OrbitControls) {
   const view = views[name];
   // Flush residual orbit damping before jumping to another composition.
   const damping = controls.enableDamping;
   controls.enableDamping = false;
   controls.update();
   controls.target.set(...view.target);
-  getCameraPosition(name, camera.aspect, camera.position);
+  getCameraPosition(name, getCameraAspect(camera), camera.position);
   updateCameraProjection(camera);
+  if ("isOrthographicCamera" in camera) {
+    setOrthographicViewHeight(camera, getFramedViewHeight(camera.position, controls.target, getCameraAspect(camera)));
+  }
   controls.update();
   controls.enableDamping = damping;
 }
@@ -63,7 +63,7 @@ export function updatePresentation(settings: ViewSettings, ao: GTVBAONode, backe
 }
 
 interface PresentationContext {
-  camera: PerspectiveCamera;
+  camera: ExampleCamera;
   controls: OrbitControls;
   gui: GUI;
   settings: ViewSettings;
@@ -81,11 +81,14 @@ export function createPresentation({
   const transitionDuration = 1.1;
   let transitionElapsed = transitionDuration;
   let currentView: CameraView | null = "overview";
-  let previousAspect = camera.aspect;
+  let previousAspect = getCameraAspect(camera);
+  let fromHeight = getCameraViewHeight(camera, controls.target);
+  let toHeight = fromHeight;
 
   const transitionTo = (name: CameraView) => {
     fromPosition.copy(camera.position);
     fromTarget.copy(controls.target);
+    fromHeight = getCameraViewHeight(camera, controls.target);
     // Clear orbit inertia without moving the visible starting pose.
     const damping = controls.enableDamping;
     const autoRotate = controls.autoRotate;
@@ -97,10 +100,22 @@ export function createPresentation({
     camera.position.copy(fromPosition);
     controls.target.copy(fromTarget);
     camera.lookAt(controls.target);
-    getCameraPosition(name, camera.aspect, toPosition);
+    getCameraPosition(name, getCameraAspect(camera), toPosition);
     toTarget.set(...views[name].target);
+    toHeight = getFramedViewHeight(toPosition, toTarget, getCameraAspect(camera));
     transitionElapsed = 0;
   };
+
+  const projection = document.querySelector<HTMLSelectElement>("#projection");
+  if (projection) {
+    projection.value = "isOrthographicCamera" in camera ? "orthographic" : "perspective";
+    projection.addEventListener("change", () => {
+      const url = new URL(window.location.href);
+      if (projection.value === "orthographic") url.searchParams.set("camera", "orthographic");
+      else url.searchParams.delete("camera");
+      window.location.assign(url.href);
+    });
+  }
 
   gui.domElement.id = "tuning-panel";
   gui.hide();
@@ -146,9 +161,11 @@ export function createPresentation({
   });
 
   return (delta: number) => {
-    if (camera.aspect !== previousAspect) {
-      previousAspect = camera.aspect;
-      if (currentView === "overview") transitionTo(currentView);
+    if (Math.abs(getCameraAspect(camera) - previousAspect) > 1e-6) {
+      previousAspect = getCameraAspect(camera);
+      if (currentView !== null && (currentView === "overview" || transitionElapsed < transitionDuration)) {
+        transitionTo(currentView);
+      }
     }
     if (transitionElapsed >= transitionDuration) {
       controls.update(delta);
@@ -160,5 +177,8 @@ export function createPresentation({
     camera.position.lerpVectors(fromPosition, toPosition, eased);
     controls.target.lerpVectors(fromTarget, toTarget, eased);
     camera.lookAt(controls.target);
+    if ("isOrthographicCamera" in camera) {
+      setOrthographicViewHeight(camera, fromHeight + (toHeight - fromHeight) * eased);
+    }
   };
 }

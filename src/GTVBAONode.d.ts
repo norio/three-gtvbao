@@ -1,4 +1,4 @@
-import type { PerspectiveCamera } from "three";
+import type { OrthographicCamera, PerspectiveCamera } from "three";
 import type { Node, TempNode, TextureNode, UniformNode } from "three/webgpu";
 import type { GTVBAOSectorMeasure } from "./GTVBAOSectorMeasure.js";
 
@@ -79,7 +79,7 @@ export default class GTVBAONode extends TempNode<"vec4"> {
   constructor(
     depthNode: Node,
     normalNode: Node | null,
-    camera: PerspectiveCamera,
+    camera: PerspectiveCamera | OrthographicCamera,
     options?: GTVBAOOptions
   );
   setVariantChangeCallback(callback: () => void): void;
@@ -101,6 +101,6 @@ export default class GTVBAONode extends TempNode<"vec4"> {
 export function gtvbao(
   depthNode: Node,
   normalNode: Node | null,
-  camera: PerspectiveCamera,
+  camera: PerspectiveCamera | OrthographicCamera,
   options?: GTVBAOOptions
 ): GTVBAONode;

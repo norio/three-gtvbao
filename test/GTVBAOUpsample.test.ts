@@ -3,6 +3,7 @@ import {
   DataTexture,
   NodeBuilder,
   PerspectiveCamera,
+  OrthographicCamera,
   ReferenceNode,
   type Node,
 } from "three/webgpu";
@@ -20,13 +21,15 @@ const SetupNodeBuilder = NodeBuilder as unknown as {
   ): NodeBuilder & { flowBuildStage(node: Node, stage: "setup"): unknown };
 };
 
-test("buffer upsampling chooses depth decoding at shader build before AO setup", () => {
+for (const orthographic of [false, true]) test(`buffer upsampling chooses depth decoding at shader build before AO setup (${orthographic ? "orthographic" : "perspective"})`, () => {
   const textures = Array.from(
     { length: 3 },
     () => new DataTexture(new Uint8Array(4), 1, 1)
   );
   const [depthTexture, normalTexture, aoTexture] = textures.map((value) => texture(value));
-  const camera = new PerspectiveCamera(55, 1, 0.1, 1000);
+  const camera = orthographic
+    ? new OrthographicCamera(-4, 4, 4, -4, 0.1, 1000)
+    : new PerspectiveCamera(55, 1, 0.1, 1000);
   const aoNode = gtvbao(depthTexture, normalTexture, camera);
   let depthMode = false;
   let modeReads = 0;
@@ -59,7 +62,7 @@ test("buffer upsampling chooses depth decoding at shader build before AO setup",
       );
       // Perspective reconstruction only needs the inverse projection. Logarithmic
       // decoding additionally depends on the source camera's near/far uniforms.
-      assert.deepEqual(cameraProperties.sort(), logarithmic ? ["far", "near"] : []);
+      assert.deepEqual(cameraProperties.sort(), logarithmic && !orthographic ? ["far", "near"] : []);
     }
   } finally {
     aoNode.dispose();

@@ -7,6 +7,7 @@ import { assertBackend, forceWebGL, readFloatTarget, reportProgress, requestedBa
 const WIDTH = 64;
 const HEIGHT = 64;
 const TOLERANCE = 2e-5;
+const orthographic = new URLSearchParams(location.search).get("camera") === "orthographic";
 
 // Known parallel planes make all four valid depth weights equal. The correct
 // result is therefore hardware bilinear AO, independently of depth encoding.
@@ -62,13 +63,15 @@ function showPixels(label: string, pixels: Float32Array) {
 async function runScenario(renderer: THREE.WebGPURenderer, scenario: Scenario) {
   const { near, far, distance, scale } = scenario;
   const logarithmic = renderer.logarithmicDepthBuffer;
-  const camera = new THREE.PerspectiveCamera(55, WIDTH / HEIGHT, near, far);
+  const camera = orthographic
+    ? new THREE.OrthographicCamera(-4, 4, 4, -4, near, far)
+    : new THREE.PerspectiveCamera(55, WIDTH / HEIGHT, near, far);
   camera.coordinateSystem = renderer.coordinateSystem;
   camera.updateProjectionMatrix();
   // Matrix projection is independent of the library's inverse projection.
   const projectedDepth = new THREE.Vector3(0, 0, -distance).applyMatrix4(camera.projectionMatrix).z;
   const deviceDepth = renderer.coordinateSystem === THREE.WebGPUCoordinateSystem ? projectedDepth : projectedDepth * 0.5 + 0.5;
-  const depth = logarithmic ? Math.log(distance / near) / Math.log(far / near) : deviceDepth;
+  const depth = logarithmic && !orthographic ? Math.log(distance / near) / Math.log(far / near) : deviceDepth;
   const depthTexture = makeTexture(new Float32Array(WIDTH * HEIGHT).fill(depth), WIDTH, HEIGHT);
   const normalTexture = makeTexture(new Float32Array(scenario.encoded ? [0.5, 0.5, 1, 1] : [0, 0, 1, 1]), 1, 1, true);
   const aoSize = Math.round(WIDTH * scale);
@@ -150,7 +153,7 @@ async function run() {
       renderer.dispose();
     }
   }
-  return { backend: requestedBackend, passed: results.every(result => result.passed), tolerance: TOLERANCE, results };
+  return { backend: requestedBackend, camera: orthographic ? "orthographic" : "perspective", passed: results.every(result => result.passed), tolerance: TOLERANCE, results };
 }
 
 // Machine-readable completion for browser automation; a failed test remains
