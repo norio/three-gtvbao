@@ -91,7 +91,7 @@ class GTVBAONode extends TempNode {
 		// hardware bilinear upsampling for free when resolutionScale < 1. Note that
 		// GTVBAODenoiseNode sizes itself from this texture, so denoising intentionally
 		// runs at AO resolution (its radius is in AO texels) before the bilinear upscale.
-		this._textureNode = passTexture( this, this._aoRenderTarget.texture );
+		this._textureNode = passTexture( this, this._getActiveRenderTarget().texture );
 		this._lastSize = { aoWidth: 0, aoHeight: 0, projectionScale: - 1, targetIsDebug: null };
 	}
 	setVariantChangeCallback( callback ) {
@@ -112,6 +112,9 @@ class GTVBAONode extends TempNode {
 		}
 	}
 	_markVariantDirty( rebuildMaterial = true ) {
+		// Publish the selected format before consumers rebuild: r186 infers float
+		// for RedFormat and vec4 for RGBAFormat when compiling texture samples.
+		this._textureNode.value = this._getActiveRenderTarget().texture;
 		if ( this._variantBatchDepth > 0 ) {
 			this._batchedVariantNotify = true;
 			this._batchedVariantRebuild ||= rebuildMaterial;
@@ -201,7 +204,6 @@ class GTVBAONode extends TempNode {
 		// Background pixels are discarded and keep this white (unoccluded) clear.
 		renderer.setClearColor( 0xffffff, 1 );
 		_quadMesh.render( renderer );
-		this._textureNode.value = renderTarget.texture;
 		RendererUtils.restoreRendererState( renderer, _rendererState );
 	}
 	setup( builder ) {

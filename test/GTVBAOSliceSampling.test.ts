@@ -13,7 +13,7 @@ test("the production slice frame and projection build as WGSL", () => {
   const { builder, flow } = buildMathProbe(output);
 
   assert.equal(output.getNodeType(builder), "vec4");
-  assert.ok(builder.nodes.includes(input));
-  assert.ok(builder.nodes.includes(row), "compile all three probe outputs");
+  assert.ok(Array.from(builder.nodes).includes(input));
+  assert.ok(Array.from(builder.nodes).includes(row), "compile all three probe outputs");
   assert.ok(flow.result.length > 0);
 });

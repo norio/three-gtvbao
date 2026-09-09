@@ -11,6 +11,7 @@ have no rendering errors.
 | `/test/webgpu/upsample.html` | 14 depth-aware upsample cases | `window.upsampleRegression` |
 | `/test/webgpu/math.html` | 15,120 shader comparisons against independent references | `window.mathRegression` |
 | `/test/webgpu/lighting.html` | Constant-AO lighting against an independent reference | `window.lightingRegression` |
+| `/test/webgpu/output-switch.html` | 12 first-frame AO/debug output transitions, including construction, batching, resize and half resolution | `window.outputSwitchRegression` |
 | `/test/webgpu/orthographic.html` | 8 camera-distance invariance scenarios | `window.orthographicRegression` |
 | `/test/webgpu/example.html` | 39 display/pass-order and lighting-image scenarios in the production example | `window.exampleRegression` |
 
@@ -115,6 +116,14 @@ scene pass uses `builtinAOContext(float(0.6))` as the independent reference.
 The image must match within `2e-5`; the reference center must also be lit, so two
 black images cannot pass. `?shaders=1` displays the actual material shaders.
 This reproduces the r185 failure without temporal sampling, denoising or AO math.
+
+`output-switch.html` checks the first native frame after selecting an AO/debug
+output, using a persistent consumer and the documented variant callback to
+rebuild its pipeline. A fresh texture sampler reads the exact producer output
+without rerendering AO. All RGBA components must agree within `1e-6`, including
+alpha; jitter debug must have distinct color channels. This catches compiling
+a debug consumer against a stale RedFormat texture on r186, including when
+debug is selected in the constructor. See the [r186 report](../../docs/r186-compatibility.md).
 
 The example compares the first and fifth frame **after each mode switch** for
 non-TRAA lighting. This is not a cold-start test of every example mode. Neutral

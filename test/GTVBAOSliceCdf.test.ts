@@ -15,7 +15,7 @@ test.each(Object.values(GTVBAO_SECTOR_MEASURE_OPTIONS))(
     const { builder, flow } = buildMathProbe(output);
 
     assert.equal(output.getNodeType(builder), "vec4");
-    assert.ok(builder.nodes.includes(input), "compile the runtime input, not a JS result");
+    assert.ok(Array.from(builder.nodes).includes(input), "compile the runtime input, not a JS result");
     assert.ok(flow.result.length > 0);
   }
 );

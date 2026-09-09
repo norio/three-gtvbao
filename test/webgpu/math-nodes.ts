@@ -28,12 +28,13 @@ export function createSliceProbe(fixture: Node<"vec4">, row: Node<"float">) {
 export function buildMathProbe(node: Node) {
   const backend = new WebGPUBackend();
   // @types/three omits these internal builder APIs. No device or renderer
-  // behavior is mocked: arithmetic code generation only needs the backend.
+  // behavior is mocked: arithmetic code generation needs the backend and
+  // the renderer's default declaration diagnostics setting.
   const builder = (backend as unknown as {
-    createNodeBuilder(object: null, renderer: { backend: WebGPUBackend }): NodeBuilder & {
+    createNodeBuilder(object: null, renderer: { backend: WebGPUBackend; debug: { diagnostics: { keywords: boolean } } }): NodeBuilder & {
       flowStagesNode(node: Node, output: string): { code: string; result: string };
     };
-  }).createNodeBuilder(null, { backend });
+  }).createNodeBuilder(null, { backend, debug: { diagnostics: { keywords: false } } });
   builder.setShaderStage("fragment");
   return { builder, flow: builder.flowStagesNode(node, "vec4") };
 }

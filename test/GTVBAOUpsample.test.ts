@@ -55,9 +55,9 @@ for (const orthographic of [false, true]) test(`buffer upsampling chooses depth 
       builder.flowBuildStage(output, "setup");
 
       assert.ok(modeReads > readsBeforeBuild, "read the current renderer during shader build");
-      assert.equal(builder.nodes.includes(aoNode), false, "AO setup must not select the mode");
-      assert.ok(builder.nodes.includes(depthTexture), "use the supplied depth texture");
-      const cameraProperties = builder.nodes.flatMap((node) =>
+      assert.equal(Array.from(builder.nodes).includes(aoNode), false, "AO setup must not select the mode");
+      assert.ok(Array.from(builder.nodes).includes(depthTexture), "use the supplied depth texture");
+      const cameraProperties = Array.from(builder.nodes).flatMap((node) =>
         node instanceof ReferenceNode && node.object === camera ? [node.property] : []
       );
       // Perspective reconstruction only needs the inverse projection. Logarithmic

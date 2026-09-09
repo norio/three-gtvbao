@@ -1,0 +1,256 @@
+[
+  {
+    "revision": "186",
+    "backend": "WebGPU",
+    "passed": true,
+    "results": [
+      {
+        "name": "constructor-debug-1",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.07843136787414551,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "constructor-debug-5",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "initial-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.07843136787414551,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "ao-to-debug-1",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.07843136787414551,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "debug-1-to-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.07843136787414551,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "ao-to-debug-5",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "debug-5-to-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.07843136787414551,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "cached-debug-return",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "debug-resize-half",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 0.873039186000824,
+        "width": 8,
+        "height": 8
+      },
+      {
+        "name": "batch-debug-to-ao-half",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.023529410362243652,
+        "debugColorRange": 0,
+        "width": 8,
+        "height": 8
+      },
+      {
+        "name": "batch-ao-to-debug-full",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "final-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.07843136787414551,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      }
+    ]
+  },
+  {
+    "revision": "186",
+    "backend": "WebGL2",
+    "passed": true,
+    "results": [
+      {
+        "name": "constructor-debug-1",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.047058820724487305,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "constructor-debug-5",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "initial-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.047058820724487305,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "ao-to-debug-1",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.047058820724487305,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "debug-1-to-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.047058820724487305,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "ao-to-debug-5",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "debug-5-to-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.047058820724487305,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "cached-debug-return",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "debug-resize-half",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 0.873039186000824,
+        "width": 8,
+        "height": 8
+      },
+      {
+        "name": "batch-debug-to-ao-half",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.023529410362243652,
+        "debugColorRange": 0,
+        "width": 8,
+        "height": 8
+      },
+      {
+        "name": "batch-ao-to-debug-full",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0,
+        "debugColorRange": 1,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "name": "final-ao",
+        "passed": true,
+        "maxRgbaError": 0,
+        "finite": true,
+        "referenceRange": 0.047058820724487305,
+        "debugColorRange": 0,
+        "width": 32,
+        "height": 32
+      }
+    ]
+  }
+]
