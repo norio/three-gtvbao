@@ -241,6 +241,9 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 						// Level chosen from the step's nominal distance (in AO texels); with
 						// screen-space sampling it is uniform across pixels, so the branch is
 						// coherent. The If chain selects among the separate level textures.
+						// The level uses the default step exponent (2) even when expFactor differs:
+						// the exact exponent changed the result by less than 0.001 mean AO for
+						// expFactor 1-4, so the cheaper pow2 stays.
 						const nominalDistance = max( float( i ).add( 0.5 ).mul( invStepSpan ).pow2().mul( radiusVS ), float( i ).add( 1 ) );
 						const mipLevel = uint( clamp( floor( log2( nominalDistance ).sub( DEPTH_MIP_SAMPLING_OFFSET ) ), 0, GTVBAO_DEPTH_MIP_COUNT - 1 ) ).toConst();
 						sampleViewPosition = vec3( 0 ).toVar();

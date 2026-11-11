@@ -1,8 +1,7 @@
 # Fixing black lighting with r185.1
 
 2026-09-09. This investigation covers the source in this repository. It started
-from the user-provided report at
-`three-modeler/artifacts/gtvbao-upsampling/EXAMPLE-AUDIT.md`.
+from a user-provided audit report of the example.
 No code or dependencies in other projects were changed.
 
 ## Cause and fix

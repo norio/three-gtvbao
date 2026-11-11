@@ -195,9 +195,9 @@ async function run() {
     const renderer = new THREE.WebGPURenderer({ forceWebGL, logarithmicDepthBuffer, antialias: false });
     renderer.setPixelRatio(1);
     renderer.setSize(SIZE, SIZE);
-    await renderer.init();
-    assertBackend(renderer);
     try {
+      await renderer.init();
+      assertBackend(renderer);
       for (const scenario of scenarios) results.push(await checkTranslation(renderer, scenario));
       results.push(await checkSliceModeInvariance(renderer));
     } finally {

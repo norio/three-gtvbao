@@ -92,8 +92,13 @@ function referenceMips(size: Size, depth: number[]): Mip[] {
 async function run() {
   const renderer = new THREE.WebGPURenderer({ forceWebGL, antialias: false });
   renderer.setSize(64, 64);
-  await renderer.init();
-  assertBackend(renderer);
+  try {
+    await renderer.init();
+    assertBackend(renderer);
+  } catch (error) {
+    renderer.dispose();
+    throw error;
+  }
   const camera = orthographic
     ? new THREE.OrthographicCamera(-4, 4, 4, -4, NEAR, FAR)
     : new THREE.PerspectiveCamera(55, 1, NEAR, FAR);
