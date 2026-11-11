@@ -5,7 +5,6 @@ import {
 	RedFormat,
 	RendererUtils,
 	RGBAFormat,
-	TempNode,
 	Vector2
 } from 'three/webgpu';
 import { passTexture, reference, uniform } from 'three/tsl';
@@ -16,6 +15,7 @@ import {
 } from './GTVBAODebugModes.js';
 import GTVBAODepthPrefilter from './GTVBAODepthPrefilter.js';
 import { createGtvbaoFragmentNode, isAoIntensityFastPath, isExpFactorFastPath } from './GTVBAOFragmentNode.js';
+import { GTVBAONodeBase } from './GTVBAONodeBase.js';
 import { GTVBAO_PASS_NAMES } from './GTVBAOPassNames.js';
 import { createGtvbaoRenderTarget } from './GTVBAORenderTarget.js';
 import { GTVBAO_SECTOR_MEASURE_OPTIONS, normalizeGtvbaoSectorMeasure } from './GTVBAOSectorMeasure.js';
@@ -26,7 +26,7 @@ const _size = /*@__PURE__*/ new Vector2();
 const _temporalRotations = [ 60, 300, 180, 240, 120, 0 ];
 const _spatialOffsets = [ 0, 0.5, 0.25, 0.75 ];
 let _rendererState;
-class GTVBAONode extends TempNode {
+class GTVBAONode extends GTVBAONodeBase {
 	static get type() {
 		return 'GTVBAONode';
 	}

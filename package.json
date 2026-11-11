@@ -62,7 +62,7 @@
     "@types/node": "^25.9.2",
     "@types/three": "^0.184.1",
     "stats-gl": "^4.2.3",
-    "three": "^0.186.0",
+    "three": "^0.187.0",
     "typescript": "^5.8.2",
     "vite": "^6.2.4",
     "vitest": "^4.1.8"

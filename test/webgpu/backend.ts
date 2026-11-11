@@ -31,9 +31,11 @@ export async function readFloatTarget(renderer: THREE.WebGPURenderer, target: TH
   const pixels = await renderer.readRenderTargetPixelsAsync(target, 0, 0, width, height) as Float32Array;
   reportProgress(`Readback ${width}×${height}: complete`);
   const webgpu = renderer.coordinateSystem === THREE.WebGPUCoordinateSystem;
-  // WebGPU readback (r184–r186) retains 256-byte row padding; GL readPixels is packed
-  // and starts at the bottom row, unlike TSL's top-origin screenCoordinate.
-  const rowStride = webgpu ? Math.ceil(width * 16 / 256) * 64 : width * 4;
+  // WebGPU readback keeps 256-byte row padding in r184–r186 and is tightly packed
+  // from r187; tell them apart by length. GL readPixels is packed and starts at
+  // the bottom row, unlike TSL's top-origin screenCoordinate.
+  const padded = webgpu && pixels.length !== width * height * 4;
+  const rowStride = padded ? Math.ceil(width * 16 / 256) * 64 : width * 4;
   const packed = new Float32Array(width * height * 4);
   for (let row = 0; row < height; row++) {
     const sourceRow = webgpu ? row : height - row - 1;

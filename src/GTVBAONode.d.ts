@@ -1,5 +1,5 @@
 import type { OrthographicCamera, PerspectiveCamera } from "three";
-import type { Node, TempNode, TextureNode, UniformNode } from "three/webgpu";
+import type { Node, TextureNode, UniformNode } from "three/webgpu";
 import type { GTVBAOSectorMeasure } from "./GTVBAOSectorMeasure.js";
 
 export { GTVBAO_SECTOR_MEASURE_OPTIONS } from "./GTVBAOSectorMeasure.js";
@@ -40,7 +40,7 @@ export interface GTVBAOVariantValue<T> {
 
 export { GTVBAO_DEBUG_MODE_OPTIONS, GTVBAO_VARIANT_LIMITS, getGtvbaoDebugVariantKey, isGtvbaoDebugEnabled, isGtvbaoTemporalJitterDebug } from "./GTVBAODebugModes.js";
 
-export default class GTVBAONode extends TempNode<"vec4"> {
+export default class GTVBAONode extends Node<"vec4"> {
   depthNode: Node;
   normalNode: Node | null;
   sliceCount: GTVBAOVariantValue<number>;

@@ -6,7 +6,6 @@ import {
 	RedFormat,
 	RepeatWrapping,
 	RendererUtils,
-	TempNode,
 	Vector2
 } from 'three/webgpu';
 import {
@@ -44,6 +43,7 @@ import {
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { getDepthNormal } from './GTVBAODepthNormal.js';
 import { depthTexelOfAoTexel } from './GTVBAODepthPrefilter.js';
+import { GTVBAONodeBase } from './GTVBAONodeBase.js';
 import { GTVBAO_PASS_NAMES } from './GTVBAOPassNames.js';
 import { createGtvbaoRenderTarget } from './GTVBAORenderTarget.js';
 import { createViewPositionFromLinearDepth, getViewPosition } from './GTVBAOViewSpace.js';
@@ -52,7 +52,7 @@ const _quadMesh = /*@__PURE__*/ new QuadMesh();
 // literals rather than read back from a uniform array inside the loop.
 const DENOISE_SAMPLES = /*@__PURE__*/ generateDenoiseSamples( 16, 2, 1 );
 let _rendererState;
-class GTVBAODenoiseNode extends TempNode {
+class GTVBAODenoiseNode extends GTVBAONodeBase {
 	static get type() {
 		return 'GTVBAODenoiseNode';
 	}
