@@ -52,15 +52,11 @@ export function createGui({
   };
 
   const pipeline = gui.addFolder("Pipeline");
-  const onPipelineChange = () => {
-    custom();
-    syncOutput();
-  };
-  pipeline.add(settings, "aoEnabled").name("AO").onChange(onPipelineChange);
+  pipeline.add(settings, "aoEnabled").name("AO").onChange(custom);
   pipeline.add(settings, "aoOnly").name("Show AO only").onChange(syncOutput);
-  pipeline.add(settings, "denoise").name("Denoise").onChange(onPipelineChange);
-  pipeline.add(settings, "temporal").name("Temporal jitter").onChange(onPipelineChange);
-  pipeline.add(settings, "traa").name("TRAA").onChange(onPipelineChange);
+  pipeline.add(settings, "denoise").name("Denoise").onChange(custom);
+  pipeline.add(settings, "temporal").name("Temporal jitter").onChange(custom);
+  pipeline.add(settings, "traa").name("TRAA").onChange(custom);
   pipeline
     .add(denoiseNode.radius, "value", 1, 5, 1)
     .name("Denoise radius")

@@ -8,7 +8,7 @@
 // and drifts with the pitch, but at a given sample count it is the least noisy.
 // The correct measures spend more sectors near the tangent plane, where the
 // horizon estimate jitters most, so they cost 30-40% more noise in dark areas
-// (measured at Balanced 2x6 in compare.html's Detail view).
+// (measured at Balanced 2x6 in the Detail view).
 export const GTVBAO_SECTOR_MEASURE_OPTIONS = {
 	Angle: 'angle',
 	'Solid angle': 'solidAngle',

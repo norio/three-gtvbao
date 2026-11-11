@@ -7,8 +7,19 @@ const size = 64;
 const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL });
 renderer.setPixelRatio(1);
 renderer.setSize(size, size);
-await renderer.init();
-assertBackend(renderer);
+function publishFailure(error: unknown) {
+  const result = { passed: false, error: String(error) };
+  Object.assign(window, { lightingRegression: result });
+  document.querySelector("#status")!.textContent = JSON.stringify(result);
+}
+try {
+  await renderer.init();
+  assertBackend(renderer);
+} catch (error) {
+  publishFailure(error);
+  renderer.dispose();
+  throw error;
+}
 const shaders: string[] = [];
 const backend = renderer.backend as typeof renderer.backend & {
   createRenderPipeline(object: { material: THREE.Material; getNodeBuilderState(): { fragmentShader: string } }, promises?: unknown): unknown;
@@ -72,9 +83,7 @@ try {
   }
   document.querySelector("#status")!.textContent = JSON.stringify(result, null, 2);
 } catch (error) {
-  const result = { passed: false, error: String(error) };
-  Object.assign(window, { lightingRegression: result });
-  document.querySelector("#status")!.textContent = JSON.stringify(result);
+  publishFailure(error);
 } finally {
   renderer.setRenderTarget(null);
   target.dispose(); ao.dispose(); aoTexture.dispose(); depthTexture.dispose(); material.dispose();

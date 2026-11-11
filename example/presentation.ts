@@ -55,7 +55,7 @@ export function updatePresentation(settings: ViewSettings, ao: GTVBAONode, backe
   });
   const backend = document.querySelector("#render-backend");
   if (backend) {
-    const quality = settings.preset === "Showcase" ? "SHOWCASE" : settings.preset.toUpperCase();
+    const quality = settings.preset.toUpperCase();
     backend.textContent = `${backendName} / ${quality}`;
   }
   const quality = document.querySelector("#render-quality");

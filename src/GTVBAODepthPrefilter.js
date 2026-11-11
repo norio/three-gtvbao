@@ -50,6 +50,7 @@ const createStorageTexture = ( width, height ) => {
 };
 const halfSize = ( size ) => size.add( uint( 1 ) ).div( uint( 2 ) );
 const quadMesh = /*@__PURE__*/ new QuadMesh();
+let _rendererState;
 const filterConstants = ( depthRangeNode ) => {
 	const depthRange = depthRangeNode.max( 1e-4 );
 	const falloffRange = depthRange.mul( FALLOFF_RANGE );
@@ -193,7 +194,7 @@ class GTVBAODepthPrefilter {
 	}
 	_renderDepthMips( renderer ) {
 		if ( this._materials === null ) this._materials = this._buildFragmentMaterials();
-		const state = RendererUtils.resetRendererState( renderer );
+		_rendererState = RendererUtils.resetRendererState( renderer, _rendererState );
 		try {
 			for ( let level = 0; level < GTVBAO_DEPTH_MIP_COUNT; level ++ ) {
 				quadMesh.material = this._materials[ level ];
@@ -202,7 +203,7 @@ class GTVBAODepthPrefilter {
 				quadMesh.render( renderer );
 			}
 		} finally {
-			RendererUtils.restoreRendererState( renderer, state );
+			RendererUtils.restoreRendererState( renderer, _rendererState );
 		}
 	}
 	_buildFragmentMaterials() {

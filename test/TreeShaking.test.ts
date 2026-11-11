@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { test } from "vitest";
@@ -22,7 +22,7 @@ async function bundle(code: string, sourceAudit = false) {
         if (sourceAudit) {
           const path = id.startsWith(".") && importer
             ? resolve(dirname(importer), id) : id;
-          if (path.startsWith(src + "/")) return { id: path, moduleSideEffects: true };
+          if (path.startsWith(src + sep)) return { id: path, moduleSideEffects: true };
         }
       },
       load(id) {

@@ -122,7 +122,7 @@ class GTVBAONode extends TempNode {
 		}
 		if ( rebuildMaterial ) {
 			this.needsUpdate = true;
-			if ( this._material !== undefined ) this._refreshMaterialFragmentNode();
+			this._refreshMaterialFragmentNode();
 		}
 		if ( this._onVariantChange !== null ) this._onVariantChange();
 	}

@@ -109,7 +109,6 @@ class GTVBAODenoiseNode extends TempNode {
 		_quadMesh.name = GTVBAO_PASS_NAMES.denoise;
 		renderer.setRenderTarget( this._denoiseRenderTarget );
 		_quadMesh.render( renderer );
-		this._textureNode.value = this._denoiseRenderTarget.texture;
 		RendererUtils.restoreRendererState( renderer, _rendererState );
 	}
 	dispose() {
