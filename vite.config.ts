@@ -10,7 +10,4 @@ export default defineConfig({
     target: "esnext",
     chunkSizeWarningLimit: 1200,
   },
-  server: {
-    host: true,
-  },
 });

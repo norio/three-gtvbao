@@ -20,6 +20,8 @@ export function getCameraAspect(camera: ExampleCamera): number {
 }
 
 export function updateCameraProjection(camera: ExampleCamera, aspect = getCameraAspect(camera)) {
+  // A hidden or zero-sized window has no usable aspect; keep the previous projection.
+  if (!Number.isFinite(aspect) || aspect <= 0) return;
   // Keep the shorter screen dimension's composition when crossing portrait.
   if (camera instanceof PerspectiveCamera) {
     camera.aspect = aspect;

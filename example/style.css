@@ -136,7 +136,8 @@ h1 span { color: var(--muted); }
 .toolbar button { border: 0; background: transparent; min-height: 36px; padding: 6px 0; font-size: 13px; font-weight: 500; white-space: nowrap; }
 .toolbar-label { color: var(--muted); margin-right: 2px; }
 .toolbar button[aria-pressed="true"] { color: var(--accent); }
-#settings-toggle span { margin-left: 10px; }
+#settings-toggle span { display: inline-block; margin-left: 10px; transition: transform .2s ease; }
+#settings-toggle[aria-expanded="true"] span { transform: rotate(45deg); }
 .gesture-hint { bottom: 9px; left: var(--page-inset); margin: 0; font-size: 11px; letter-spacing: .015em; color: var(--muted); pointer-events: none; }
 
 .lil-gui.root, .lil-gui.root .lil-gui {

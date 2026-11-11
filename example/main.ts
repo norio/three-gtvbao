@@ -48,6 +48,8 @@ export interface ViewSettings {
 }
 
 const params = new URLSearchParams(window.location.search);
+// A hidden window reports 0x0; use a square aspect until the first real resize.
+const viewportAspect = () => (window.innerWidth > 0 && window.innerHeight > 0 ? window.innerWidth / window.innerHeight : 1);
 const forceWebGL = params.get("backend") === "webgl";
 const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL });
 // Keep the full-resolution AO affordable on very dense displays.
@@ -68,7 +70,7 @@ const backendName = renderer.coordinateSystem === THREE.WebGPUCoordinateSystem ?
 
 const camera = createExampleCamera(
   params.get("camera") === "orthographic" ? "orthographic" : "perspective",
-  window.innerWidth / window.innerHeight,
+  viewportAspect(),
 );
 camera.position.set(11, 9, 14);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -233,7 +235,7 @@ const gui = createGui({ renderer, sun, aoNode, denoiseNode, settings, applyPrese
 const updateCamera = createPresentation({ camera, controls, gui, settings, aoNode, syncOutput });
 
 window.addEventListener("resize", () => {
-  updateCameraProjection(camera, window.innerWidth / window.innerHeight);
+  updateCameraProjection(camera, viewportAspect());
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 

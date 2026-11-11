@@ -225,6 +225,8 @@ npm run build
 Vite が表示するローカル URL (通常は `http://localhost:5173`) を開いてください。[サンプル](example/) には
 実際のバックエンド名が表示されます。`?backend=webgl` を付けると WebGL2 を強制できます。アプリでは
 `new THREE.WebGPURenderer({ forceWebGL: true })` を使います。指定しない場合は WebGPU が利用できないと WebGL2 が選ばれます。
+開発サーバーは localhost のみで待ち受けます。同じネットワークの他の端末から開く場合は
+`npm run dev -- --host` を使います。
 
 `npm test` には tree shaking の検証も含まれます。単独で実行する場合は `npm run test:treeshake` を使います。
 ブラウザでの GPU 検証は別途実施します。[WebGPU / WebGL2 回帰テスト](test/webgpu/README.md) を参照してください。

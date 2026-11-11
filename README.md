@@ -226,6 +226,7 @@ npm run build
 Open the local URL printed by Vite (normally `http://localhost:5173`). The [example](example/)
 shows the active backend; append `?backend=webgl` to force WebGL2. In your app, use
 `new THREE.WebGPURenderer({ forceWebGL: true })`; otherwise WebGL2 is selected when WebGPU is unavailable.
+The dev server listens on localhost only; run `npm run dev -- --host` to reach it from other devices on your network.
 
 `npm test` includes the tree-shaking checks; `npm run test:treeshake` runs those alone.
 Browser GPU checks are separate: see [WebGPU / WebGL2 regressions](test/webgpu/README.md).

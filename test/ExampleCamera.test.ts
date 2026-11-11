@@ -76,3 +76,29 @@ test("perspective resize preserves the existing portrait composition", () => {
   updateCameraProjection(camera, 2);
   closeTo(camera.fov, 38);
 });
+
+// A hidden or zero-sized window yields aspect = 0/0 = NaN; the camera must be left untouched.
+for (const type of ["perspective", "orthographic"] as const) {
+  test(`${type} camera ignores a non-finite or non-positive aspect`, () => {
+    const camera = createExampleCamera(type, 2);
+    for (const aspect of [NaN, 0, Infinity, -Infinity, -1]) {
+      const before = camera.projectionMatrix.toArray();
+      updateCameraProjection(camera, aspect);
+      const after = camera.projectionMatrix.toArray();
+      assert.ok(after.every(Number.isFinite), `aspect ${aspect} produced a non-finite projection`);
+      assert.deepEqual(after, before, `aspect ${aspect} changed the projection`);
+    }
+  });
+}
+
+test("orthographic camera frames correctly after rejected aspects", () => {
+  const camera = createExampleCamera("orthographic", 2);
+  assert.ok(camera instanceof OrthographicCamera);
+  setOrthographicViewHeight(camera, 8);
+  for (const aspect of [NaN, 0, Infinity, -1]) updateCameraProjection(camera, aspect);
+  updateCameraProjection(camera, 2);
+  closeTo(getCameraAspect(camera), 2);
+  closeTo(getCameraViewHeight(camera, new Vector3()), 8);
+  closeTo(new Vector3(8, 0, -10).project(camera).x, 1);
+  closeTo(new Vector3(0, 4, -10).project(camera).y, 1);
+});
