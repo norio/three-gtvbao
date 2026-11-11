@@ -38,9 +38,7 @@ const noiseTexture = new THREE.DataTexture(
 );
 noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
 noiseTexture.needsUpdate = true;
-const denoiseInternals = denoiseNode as unknown as { noiseNode: ReturnType<typeof texture> | null };
-denoiseInternals.noiseNode?.value.dispose();
-denoiseInternals.noiseNode = texture(noiseTexture);
+denoiseNode.noiseNode = texture(noiseTexture);
 
 type Counts = { pre: number; lit: number; ao: number; denoise: number; compute: number; depthMip: number };
 const emptyCounts = (): Counts => ({ pre: 0, lit: 0, ao: 0, denoise: 0, compute: 0, depthMip: 0 });
@@ -95,7 +93,7 @@ function assertFiniteCamera(scenario: string) {
   }
 }
 
-async function readOutput(output = pipeline) {
+async function readOutput(output: THREE.RenderPipeline) {
   renderer.setRenderTarget(target);
   output.render();
   assertFiniteCamera("reference output");

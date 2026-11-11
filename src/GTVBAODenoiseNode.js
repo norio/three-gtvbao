@@ -62,6 +62,7 @@ class GTVBAODenoiseNode extends TempNode {
 		this.depthNode = depthNode;
 		this.normalNode = normalNode;
 		this.noiseNode = null;
+		this._defaultNoiseTexture = null;
 		this._normalEncoding = options.normalEncoding ?? 'view';
 		this.useTemporalDenoiseRotation = options.useTemporalDenoiseRotation ?? false;
 		// GTVBAONode whose linear-depth MIP level 0 (AO resolution) replaces the
@@ -112,12 +113,15 @@ class GTVBAODenoiseNode extends TempNode {
 		RendererUtils.restoreRendererState( renderer, _rendererState );
 	}
 	dispose() {
-		this.noiseNode?.value?.dispose?.();
+		this._defaultNoiseTexture?.dispose();
 		this._denoiseRenderTarget.dispose();
 		this._material.dispose();
 	}
 	_getNoiseNode() {
-		if ( this.noiseNode === null ) this.noiseNode = texture( generateDefaultNoise() );
+		if ( this.noiseNode === null ) {
+			this._defaultNoiseTexture = generateDefaultNoise();
+			this.noiseNode = texture( this._defaultNoiseTexture );
+		}
 		return this.noiseNode;
 	}
 	_updateDenoiseRotationIndex( frameId ) {

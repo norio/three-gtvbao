@@ -201,7 +201,7 @@ h1 span { color: var(--muted); }
   .eyebrow { margin-bottom: 10px; }
   h1 { font-size: 48px; }
   .description { display: none; }
-  .render-status { top: 72px; left: auto; right: var(--page-inset); text-align: right; }
+  .render-status { top: 72px; }
   .view-controls { bottom: 80px; }
   .toolbar { bottom: 16px; padding-top: 6px; }
   .gesture-hint { display: none; }

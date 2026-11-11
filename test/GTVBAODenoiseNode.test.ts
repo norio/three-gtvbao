@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Color, PerspectiveCamera } from "three";
+import { Color, type EventDispatcher, PerspectiveCamera } from "three";
 import { uniform } from "three/tsl";
 import { test } from "vitest";
 import GTVBAODenoiseNode, {
@@ -87,6 +87,47 @@ test("GTVBAODenoiseNode rebuilds its fragment when the AO depth-mips variant cha
 
   node.dispose();
 });
+
+test("GTVBAODenoiseNode does not dispose a user-supplied noise texture", () => {
+  const node = createDenoiseNode();
+  const userNoise = createTextureNode();
+  let userDisposeCount = 0;
+  userNoise.value.dispose = () => {
+    userDisposeCount += 1;
+  };
+  node.noiseNode = userNoise;
+  node.setup(createFakeBuilder() as never);
+
+  node.dispose();
+
+  assert.equal(node.noiseNode, userNoise);
+  assert.equal(userDisposeCount, 0);
+});
+
+test("GTVBAODenoiseNode disposes the default noise texture it generated", () => {
+  const node = createDenoiseNode();
+  assert.equal(node.noiseNode, null);
+  node.setup(createFakeBuilder() as never);
+
+  // Re-read through a function so the earlier null assertion does not narrow the type.
+  const generated = ((): SampleableTextureNode | null => node.noiseNode)();
+  assert.notEqual(generated, null);
+  let disposeEvents = 0;
+  (generated!.value as unknown as EventDispatcher<{ dispose: object }>).addEventListener("dispose", () => {
+    disposeEvents += 1;
+  });
+
+  node.dispose();
+
+  assert.equal(disposeEvents, 1);
+});
+
+function createFakeBuilder() {
+  return {
+    getSharedContext: () => ({}),
+    renderer: { logarithmicDepthBuffer: false },
+  };
+}
 
 function createDenoiseNode(options: GTVBAODenoiseOptions = {}) {
   return new GTVBAODenoiseNode(

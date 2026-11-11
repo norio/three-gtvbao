@@ -57,6 +57,8 @@ export function isGtvbaoDebugEnabled(debugMode: number): boolean;
 export function isGtvbaoTemporalJitterDebug(debugMode: number): boolean;
 
 export default class GTVBAONode extends TempNode<"vec4"> {
+  depthNode: Node;
+  normalNode: Node | null;
   sliceCount: GTVBAOVariantValue<number>;
   stepCount: GTVBAOVariantValue<number>;
   radius: UniformNode<"float", number>;

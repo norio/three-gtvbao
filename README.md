@@ -207,6 +207,9 @@ using their integral weights.
   matters more than reducing pitch bias.
 - AO uses screen-space depth, so hidden or off-screen geometry cannot contribute.
 - Thickness is an approximation; the perspective-correct offset along each sample's own view ray is not implemented.
+- The depth and normal inputs are expected at the drawing buffer's resolution. With depth MIPs enabled,
+  a pre-pass rendered at a different resolution scale selects the wrong depth texels.
+- Renderers created with `reversedDepthBuffer: true` are unsupported: background detection assumes a far depth of 1.
 
 ## Development
 

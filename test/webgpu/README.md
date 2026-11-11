@@ -99,7 +99,9 @@ MIP draws. AO frames require two compute dispatches on WebGPU, or five depth
 MIP render passes and zero compute dispatches on WebGL2;
 float output hashes support comparisons across checkouts.
 
-The showcase first exercises denoised + TRAA → AO off → denoised + TRAA to
+The first ten `ui-*` scenarios mirror the public view buttons (full render, AO only
+and AO off, with and without denoising) under temporal sampling and TRAA. The
+showcase scenarios then exercise denoised + TRAA → AO off → denoised + TRAA to
 verify that cached beauty targets remain valid when returning to the initial view.
 
 AO/TRAA off → TRAA on → both off must produce pre-pass counts of 0 → 1 → 0,
