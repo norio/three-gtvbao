@@ -88,19 +88,26 @@ const { scene, sun, update: updateScene } = createScene();
 const timer = new THREE.Timer();
 timer.connect(document);
 
-// 1. An opaque pre-pass provides depth, view-space normals and velocity.
+// 1. An opaque pre-pass provides depth, encoded view-space normals and velocity.
+// The encoding is written inline because three renamed its helper between
+// revisions; it is the inverse of what the AO nodes apply for
+// normalEncoding "directionToColor" (normal * 2 - 1).
 const prePass = pass(scene, camera);
 prePass.transparent = false;
-prePass.setMRT(mrt({ output: normalView, velocity }));
+prePass.setMRT(mrt({ output: normalView.mul(0.5).add(0.5), velocity }));
 prePass.contextNode = createPassthroughAoContext();
 const preNormal = prePass.getTextureNode("output");
 const preDepth = prePass.getTextureNode("depth");
 const preVelocity = prePass.getTextureNode("velocity");
+// 8-bit normals halve the normal attachment's bandwidth. Set the type after
+// velocity is cloned from output so TRAA keeps its half-float velocity texture.
+prePass.getTexture("output").type = THREE.UnsignedByteType;
 
 // 2. The AO reads the pre-pass; the denoiser reads the AO.
-const aoNode = gtvbao(preDepth, preNormal, camera);
+const aoNode = gtvbao(preDepth, preNormal, camera, { normalEncoding: "directionToColor" });
 const denoiseNode = gtvbaoDenoise(aoNode.getTextureNode(), preDepth, preNormal, camera, {
   linearDepthSource: aoNode,
+  normalEncoding: "directionToColor",
 });
 renderPassAfter(aoNode, prePass);
 renderPassAfter(denoiseNode, aoNode);
