@@ -184,7 +184,7 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 			if ( variant.debugMode === GTVBAO_DEBUG_MODE_OPTIONS[ 'Normal Stability' ] ) {
 				const projectedNormalStability = float( 0 ).toVar();
 				forEachSlice( ( sliceDir ) => {
-					const planeNormal = variant.usePerspectiveCorrectSlice ? normalize( cross( sliceDir, viewDir ) ) : normalize( cross( sliceDir, viewNormal ) );
+					const planeNormal = normalize( cross( sliceDir, viewDir ) );
 					const projectedNormal = viewNormal.sub( planeNormal.mul( dot( viewNormal, planeNormal ) ) ).toConst();
 					projectedNormalStability.addAssign( projectedNormal.length().clamp() );
 				} );
@@ -301,7 +301,9 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 			};
 			const addSliceOcclusion = ( sliceDir ) => {
 				const slideDirTexelSize = sliceDir.xy.mul( aoTexelSize ).toConst();
-				const planeNormal = variant.usePerspectiveCorrectSlice ? normalize( cross( sliceDir, viewDir ) ) : normalize( cross( sliceDir, viewNormal ) );
+				// The slice plane is spanned by the slice direction and the view vector in both
+				// slice modes; usePerspectiveCorrectSlice only changes how sliceDir is chosen.
+				const planeNormal = normalize( cross( sliceDir, viewDir ) );
 				const tangent = cross( viewDir, planeNormal ).toConst();
 				const projectedNormal = viewNormal.sub( planeNormal.mul( dot( viewNormal, planeNormal ) ) ).toConst();
 				const projectedNormalLength = projectedNormal.length().toConst();

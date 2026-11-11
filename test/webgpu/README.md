@@ -12,7 +12,7 @@ have no rendering errors.
 | `/test/webgpu/math.html` | 15,120 shader comparisons against independent references | `window.mathRegression` |
 | `/test/webgpu/lighting.html` | Constant-AO lighting against an independent reference | `window.lightingRegression` |
 | `/test/webgpu/output-switch.html` | 12 first-frame AO/debug output transitions, including construction, batching, resize and half resolution | `window.outputSwitchRegression` |
-| `/test/webgpu/orthographic.html` | 8 camera-distance invariance scenarios | `window.orthographicRegression` |
+| `/test/webgpu/orthographic.html` | 10 scenarios: 8 camera-distance invariance + 2 slice-mode invariance | `window.orthographicRegression` |
 | `/test/webgpu/example.html` | 39 display/pass-order and lighting-image scenarios in the production example | `window.exampleRegression` |
 
 Wait for the completion result before reading it; require `passed === true`.
@@ -78,6 +78,17 @@ occlusion also fail. Variants cover world/screen radius, depth MIPs on/off,
 full/half resolution, and supplied/depth-derived normals, with the renderer
 logarithmic-depth option both off and on. The default distance-scaled thickness
 is explicitly disabled because that option intentionally depends on view depth.
+That gives 4 scenarios x 2 logarithmic-depth settings = 8 camera-distance entries.
+
+Each logarithmic-depth setting also runs a `slice-mode-invariance` entry (2 total,
+10 overall). `usePerspectiveCorrectSlice` only selects the slice distribution for
+perspective cameras, so with an orthographic camera the raw AO rendered with it
+`true` and `false` (fixed sampling, otherwise identical options) must match to
+`1e-6`; the measured maximum difference is reported. Its fixture is a plane tilted
+about 29 degrees from the view axis, with supplied normals consistent with its
+depth, carrying a raised block. Head-on surfaces would hide a slice-plane normal
+computed from the surface normal instead of the view direction, so the
+entry also requires real occlusion (minimum AO below 0.98).
 
 Append `?camera=orthographic` to `depth-mips.html` and `upsample.html` to exercise
 the existing numerical references with linear orthographic scene depth, including

@@ -5,6 +5,8 @@ import { assertBackend, forceWebGL, renderProbe, reportProgress, requestedBacken
 
 const SIZE = 96;
 const TOLERANCE = 2 / 255;
+// Both slice modes generate the same shader for an orthographic camera.
+const SLICE_MODE_TOLERANCE = 1e-6;
 const scenarios = [
   { name: "world-radius", mips: false, scale: 1, screenSpace: false, normals: true },
   { name: "world-radius-mips", mips: true, scale: 1, screenSpace: false, normals: true },
@@ -115,6 +117,78 @@ async function checkTranslation(renderer: THREE.WebGPURenderer, scenario: Scenar
   }
 }
 
+// usePerspectiveCorrectSlice only selects the slice distribution for perspective
+// cameras, so an orthographic camera must produce bit-identical raw AO either way.
+// The plane normal of a slice has to come from the view direction in both modes:
+// the two formulas only agree where the surface normal is parallel to the view
+// axis, so the fixture is a tilted plane (supplied normals consistent with its
+// depth) carrying a raised block, never a head-on surface.
+async function checkSliceModeInvariance(renderer: THREE.WebGPURenderer) {
+  const camera = new THREE.OrthographicCamera(-2, 2, 2, -2, 0, 32);
+  camera.coordinateSystem = renderer.coordinateSystem;
+  camera.updateProjectionMatrix();
+  const slopeX = 0.5;
+  const slopeY = 0.25;
+  const depthData = new Float32Array(SIZE * SIZE);
+  const normalData = new Float32Array(SIZE * SIZE * 4);
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+    // View-space plane z = -(10 + slopeX*vx + slopeY*vy), lifted 1 toward the camera inside the block.
+    // Its normal (slopeX, slopeY, 1) tilts about 29 degrees away from the view axis.
+    const viewX = (x + 0.5) / SIZE * 4 - 2;
+    const viewY = 2 - (y + 0.5) / SIZE * 4;
+    const raised = x >= 24 && x < 62 && y >= 30 && y < 68;
+    const z = 10 + slopeX * viewX + slopeY * viewY - (raised ? 1 : 0);
+    const clip = new THREE.Vector3(0, 0, -z).applyMatrix4(camera.projectionMatrix).z;
+    depthData[y * SIZE + x] = renderer.coordinateSystem === THREE.WebGPUCoordinateSystem ? clip : clip * 0.5 + 0.5;
+    normalData.set([slopeX, slopeY, 1, 1], (y * SIZE + x) * 4);
+  }
+  const depthTexture = new THREE.DataTexture(depthData, SIZE, SIZE, THREE.RedFormat, THREE.FloatType);
+  const normalTexture = new THREE.DataTexture(normalData, SIZE, SIZE, THREE.RGBAFormat, THREE.FloatType);
+  depthTexture.needsUpdate = true;
+  normalTexture.needsUpdate = true;
+  const nodes = [true, false].map(usePerspectiveCorrectSlice => new GTVBAONode(
+    texture(depthTexture), texture(normalTexture), camera, {
+      useDepthMips: false, resolutionScale: 1, useTemporalFiltering: false, useLinearThickness: false,
+      useScreenSpaceSampling: false, radius: 1.5, thickness: 0.5, maxThickness: 1, sliceCount: 4, stepCount: 12,
+      usePerspectiveCorrectSlice,
+    }));
+  try {
+    const builder = { renderer, getSharedContext: () => ({}) };
+    for (const ao of nodes) {
+      ao.setup(builder as never);
+      reportProgress(`slice-mode-invariance: usePerspectiveCorrectSlice ${ao.usePerspectiveCorrectSlice.value}`);
+      (ao as unknown as Updatable).updateBefore({ renderer, frameId: 0 });
+    }
+    const [correct, imagePlane] = nodes.map(ao => texture(ao.getTextureNode().value).sample(screenUV).r);
+    const pixels = await renderProbe(renderer, vec4(correct, imagePlane, 0, 1), SIZE, SIZE);
+    image(`${renderer.logarithmicDepthBuffer ? "log flag" : "normal"} / slice-mode-invariance (perspective-correct | image-plane)`, pixels);
+    let maxError = 0;
+    let squaredError = 0;
+    let minAo = 1;
+    let maxAo = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      const a = pixels[index];
+      const b = pixels[index + 1];
+      if (!Number.isFinite(a) || !Number.isFinite(b)) throw new Error("Nonfinite AO: slice-mode-invariance");
+      const error = Math.abs(a - b);
+      maxError = Math.max(maxError, error);
+      squaredError += error * error;
+      minAo = Math.min(minAo, a, b);
+      maxAo = Math.max(maxAo, a, b);
+    }
+    // Real occlusion must be present, or identical images would prove nothing.
+    const channel = { label: "raw AO, usePerspectiveCorrectSlice true vs false", maxError,
+      rmse: Math.sqrt(squaredError / (SIZE * SIZE)), minAo, maxAo, tolerance: SLICE_MODE_TOLERANCE,
+      passed: maxError <= SLICE_MODE_TOLERANCE && minAo < 0.98 && maxAo > 0.99 && minAo >= 0 && maxAo <= 1 };
+    return { name: "slice-mode-invariance", logarithmicDepthBuffer: renderer.logarithmicDepthBuffer,
+      passed: channel.passed, channels: [channel] };
+  } finally {
+    for (const ao of nodes) ao.dispose();
+    depthTexture.dispose();
+    normalTexture.dispose();
+  }
+}
+
 async function run() {
   const results = [];
   for (const logarithmicDepthBuffer of [false, true]) {
@@ -125,6 +199,7 @@ async function run() {
     assertBackend(renderer);
     try {
       for (const scenario of scenarios) results.push(await checkTranslation(renderer, scenario));
+      results.push(await checkSliceModeInvariance(renderer));
     } finally {
       renderer.dispose();
     }
