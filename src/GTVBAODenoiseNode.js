@@ -41,6 +41,7 @@ import {
 	viewZToPerspectiveDepth
 } from 'three/tsl';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+import { getGtvbaoContextSignature } from './GTVBAOContextSignature.js';
 import { getDepthNormal } from './GTVBAODepthNormal.js';
 import { depthTexelOfAoTexel } from './GTVBAODepthPrefilter.js';
 import { GTVBAONodeBase } from './GTVBAONodeBase.js';
@@ -85,6 +86,7 @@ class GTVBAODenoiseNode extends GTVBAONodeBase {
 		this._textureNode = passTexture( this, this._denoiseRenderTarget.texture );
 		this._lastSize = { width: 0, height: 0 };
 		this._fragmentContext = null;
+		this._fragmentInputs = null;
 		this._logarithmicDepthBuffer = false;
 		this._fragmentLinearDepthNode = null;
 	}
@@ -144,7 +146,23 @@ class GTVBAODenoiseNode extends GTVBAONodeBase {
 			: null;
 	}
 	_refreshMaterialFragmentNode() {
-		this._fragmentLinearDepthNode = this._getLinearDepthNode();
+		const noiseNode = this._getNoiseNode();
+		const linearDepthNode = this._getLinearDepthNode();
+		const inputs = [
+			linearDepthNode,
+			noiseNode,
+			this.textureNode,
+			this.depthNode,
+			this.normalNode,
+			this._normalEncoding,
+			this._logarithmicDepthBuffer,
+			getGtvbaoContextSignature( this._fragmentContext )
+		];
+		// setup runs for every consumer material build, so unchanged denoiser inputs
+		// must keep the compiled material instead of recompiling for each consumer.
+		if ( this._fragmentInputs !== null && inputs.every( ( input, index ) => input === this._fragmentInputs[ index ] ) ) return;
+		this._fragmentInputs = inputs;
+		this._fragmentLinearDepthNode = linearDepthNode;
 		this._material.fragmentNode = this._createFragmentNode();
 		this._material.needsUpdate = true;
 	}
@@ -154,6 +172,7 @@ class GTVBAODenoiseNode extends GTVBAONodeBase {
 		const depthResolution = vec2( textureSize( this.depthNode, 0 ) ).toConst();
 		const maxDepthTexel = depthResolution.sub( 1 ).toConst();
 		const linearDepthNode = this._fragmentLinearDepthNode;
+		const depthTexelSize = linearDepthNode === null ? null : vec2( 1 ).div( depthResolution ).toConst();
 		const aoResolution = linearDepthNode === null ? null : vec2( textureSize( linearDepthNode, 0 ) ).toConst();
 		const viewPositionFromLinearDepth = linearDepthNode === null ? null : createViewPositionFromLinearDepth( this._cameraProjectionMatrixInverse, this._isOrthographicCamera );
 		// Level-0 texels stand for the scene-depth texel selected by this expression
@@ -162,7 +181,7 @@ class GTVBAODenoiseNode extends GTVBAONodeBase {
 			if ( linearDepthNode === null ) return getViewPosition( sampleUv, depth, this._cameraProjectionMatrixInverse, this._isOrthographicCamera );
 			const aoTexel = min( floor( sampleUv.mul( aoResolution ) ), aoResolution.sub( 1 ) ).toConst();
 			const sourceTexel = depthTexelOfAoTexel( aoTexel, depthResolution, aoResolution );
-			const sourceUv = sourceTexel.add( 0.5 ).div( depthResolution );
+			const sourceUv = sourceTexel.add( 0.5 ).mul( depthTexelSize );
 			return viewPositionFromLinearDepth( sourceUv, linearDepthNode.load( ivec2( aoTexel ) ).r );
 		};
 		const sampleAo = ( sampleUv ) => this.textureNode.sample( sampleUv ).r;

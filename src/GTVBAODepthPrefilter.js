@@ -23,6 +23,20 @@ import {
 } from 'three/tsl';
 export const GTVBAO_DEPTH_MIP_COUNT = 5;
 const WORKGROUP_SIZE = [ 64 ];
+const MAX_WORKGROUPS_PER_DIMENSION = 65535; // WebGPU's guaranteed minimum limit.
+const dispatchSizeOf = ( count ) => {
+	const groups = Math.ceil( count / WORKGROUP_SIZE[ 0 ] );
+	return groups > MAX_WORKGROUPS_PER_DIMENSION
+		? [ MAX_WORKGROUPS_PER_DIMENSION, Math.ceil( groups / MAX_WORKGROUPS_PER_DIMENSION ), 1 ]
+		: [ groups, 1, 1 ];
+};
+export const sceneDepthToLinearDepth = ( depth, cameraNear, cameraFar, isOrthographicCamera, logarithmicDepthBuffer ) => {
+	if ( isOrthographicCamera ) return orthographicDepthToViewZ( depth, cameraNear, cameraFar ).negate();
+	const viewZ = logarithmicDepthBuffer
+		? logarithmicDepthToViewZ( depth, cameraNear, cameraFar )
+		: perspectiveDepthToViewZ( depth, cameraNear, cameraFar );
+	return viewZ.negate();
+};
 // Scene-depth texel represented by an AO texel: the depth texel under the AO
 // texel's center, floor( ( t + 0.5 ) * D / A ), evaluated as the integer
 // quotient ( ( 2t + 1 ) * D ) / ( 2A ). The float form lands on either side of
@@ -77,18 +91,20 @@ const filterFrom = ( constants, load, texelX, texelY ) => {
 	return filterDepths( constants, load( x0, y0 ), load( x1, y0 ), load( x0, y1 ), load( x1, y1 ) );
 };
 // Builds a linear-depth (positive view-space distance) MIP chain at AO
-// resolution from the full-resolution scene depth. The AO march reads this
-// chain instead of the scene depth: the footprint is 4x smaller at level 0
-// (16x at 0.5 scale on both axes), far steps use coarser levels that stay in
-// cache, and the per-sample perspective divide disappears.
+// resolution from the full-resolution scene depth. Far AO steps use coarser
+// levels whose smaller footprints stay in cache, and their per-sample
+// perspective divide disappears. Level 0 supplies the denoiser and upsample;
+// the AO center derives the same linear depth from its scene-depth fetch.
 //
 // Level 0 decimates the scene depth with exactly the texel selection the AO
 // shader uses for its center pixel, so levels 1..4 apply the depth-aware filter
-// to 2x2 blocks of the previous level. WebGPU uses two compute dispatches
-// (0+1, then 2..4 from level 1); WebGL2 uses five float render-target passes.
+// to 2x2 blocks of the previous level. WebGPU uses two compute dispatches in
+// one pass (0+1, then 2..4 from level 1); WebGL2 uses five float render-target
+// passes: level 1 filters level 0, which holds exactly the values decimate
+// would produce. Levels 2..4 recursively filter level 1 as on WebGPU.
 //
-// Sizes enter the shaders as uniforms and the dispatch counts are passed per
-// call, so a resize only reallocates textures; shaders compile once per depth
+// Sizes enter the shaders as uniforms and dispatch sizes are updated per node,
+// so a resize only reallocates textures; shaders compile once per depth
 // mode on either backend.
 class GTVBAODepthPrefilter {
 	constructor( depthNode, cameraNear, cameraFar, depthRange, isOrthographicCamera = false ) {
@@ -99,8 +115,10 @@ class GTVBAODepthPrefilter {
 		this._depthRange = depthRange;
 		this._logarithmicDepthBuffer = false;
 		this._sizes = [];
+		this._dispatchSizes = [];
 		this._textures = [];
-		this._textureNodes = Array.from( { length: GTVBAO_DEPTH_MIP_COUNT }, () => texture( createStorageTexture( 1, 1 ) ) );
+		this._placeholders = Array.from( { length: GTVBAO_DEPTH_MIP_COUNT }, () => createStorageTexture( 1, 1 ) );
+		this._textureNodes = this._placeholders.map( ( placeholder ) => texture( placeholder ) );
 		this._storeNodes = this._textureNodes.map( ( textureNode ) => storageTexture( textureNode.value ) );
 		this._aoResolution = uniform( new Vector2() );
 		this._depthResolution = uniform( new Vector2() );
@@ -134,8 +152,24 @@ class GTVBAODepthPrefilter {
 			const previous = this._sizes[ level - 1 ];
 			this._sizes.push( { width: Math.ceil( previous.width / 2 ), height: Math.ceil( previous.height / 2 ) } );
 		}
+		const [ , size1, size2 ] = this._sizes;
+		this._dispatchSizes = [ dispatchSizeOf( size1.width * size1.height ), dispatchSizeOf( size2.width * size2.height ) ];
 		this._disposeTextures();
 		this._allocateTextures();
+	}
+	release() {
+		if ( this._textures.length === 0 ) return;
+		this._disposeTextures();
+		this._sizes = [];
+		this._dispatchSizes = [];
+		this._width = 0;
+		this._height = 0;
+		this._depthWidth = 0;
+		this._depthHeight = 0;
+		for ( let level = 0; level < GTVBAO_DEPTH_MIP_COUNT; level ++ ) {
+			this._textureNodes[ level ].value = this._placeholders[ level ];
+			this._storeNodes[ level ].value = this._placeholders[ level ];
+		}
 	}
 	_allocateTextures() {
 		this._textures = this._sizes.map( ( { width, height }, level ) => {
@@ -162,13 +196,18 @@ class GTVBAODepthPrefilter {
 			return;
 		}
 		if ( this._kernels === null ) this._kernels = this._buildKernels();
-		const [ , size1, size2 ] = this._sizes;
-		renderer.compute( this._kernels[ 0 ], size1.width * size1.height );
-		renderer.compute( this._kernels[ 1 ], size2.width * size2.height );
+		// three r184-r187 run a node array in one command encoder/compute pass,
+		// using each node's dispatchSize when no size argument is given.
+		// instanceIndex flattens global IDs using workgroup counts, so a 2D split
+		// keeps the same indexing. Padding is harmless: A guards y < size1.y;
+		// B's out-of-range stores are dropped and its loads are clamped.
+		for ( let i = 0; i < this._kernels.length; i ++ ) this._kernels[ i ].dispatchSize = this._dispatchSizes[ i ];
+		renderer.compute( this._kernels );
 	}
 	dispose() {
 		this._disposeKernels();
 		this._disposeTextures();
+		for ( const placeholder of this._placeholders ) placeholder.dispose();
 	}
 	_disposeKernels() {
 		for ( const kernel of this._kernels ?? [] ) kernel.dispose();
@@ -186,11 +225,7 @@ class GTVBAODepthPrefilter {
 		this._textures = [];
 	}
 	_linearDepth( depth ) {
-		if ( this._isOrthographicCamera ) return orthographicDepthToViewZ( depth, this._cameraNear, this._cameraFar ).negate();
-		const viewZ = this._logarithmicDepthBuffer
-			? logarithmicDepthToViewZ( depth, this._cameraNear, this._cameraFar )
-			: perspectiveDepthToViewZ( depth, this._cameraNear, this._cameraFar );
-		return viewZ.negate();
+		return sceneDepthToLinearDepth( depth, this._cameraNear, this._cameraFar, this._isOrthographicCamera, this._logarithmicDepthBuffer );
 	}
 	_renderDepthMips( renderer ) {
 		if ( this._materials === null ) this._materials = this._buildFragmentMaterials();
@@ -225,7 +260,11 @@ class GTVBAODepthPrefilter {
 				};
 				if ( level === 0 ) return vec4( decimate( texel.x, texel.y ) );
 				const constants = filterConstants( this._depthRange );
-				if ( level === 1 ) return vec4( filterFrom( constants, decimate, texel.x, texel.y ) );
+				if ( level === 1 ) {
+					const maxTexel0 = ivec2( size0.sub( uint( 1 ) ) ).toConst();
+					const loadLevel0 = ( x, y ) => this._textureNodes[ 0 ].load( min( ivec2( x, y ), maxTexel0 ) ).r;
+					return vec4( filterFrom( constants, loadLevel0, texel.x, texel.y ) );
+				}
 				const maxTexel1 = ivec2( size1.sub( uint( 1 ) ) ).toConst();
 				let load = ( x, y ) => this._textureNodes[ 1 ].load( min( ivec2( x, y ), maxTexel1 ) ).r;
 				// Match the compute kernel's recursive sampling from level 1.

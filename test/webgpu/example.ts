@@ -211,7 +211,7 @@ async function run() {
       lit: only || debug > 0 ? 0 : 1,
       ao: runsAo ? 1 : 0,
       denoise: runsAo && denoise && debug === 0 && scenario.enabled ? 1 : 0,
-      compute: runsAo && backendName === "WebGPU" ? 2 : 0,
+      compute: runsAo && backendName === "WebGPU" ? 1 : 0,
       depthMip: runsAo && backendName === "WebGL2" ? 5 : 0,
     };
     let passed = Object.entries(expected).every(([key, value]) => observed[key as keyof Counts] === value);

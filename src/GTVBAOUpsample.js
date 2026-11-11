@@ -38,6 +38,7 @@ export function createGtvbaoDepthAwareAo( aoNode, aoTexture, { screenUv, viewPos
 			const linearDepthTexture = aoNode.getDepthMipNodes()[ 0 ];
 			const aoResolution = vec2( textureSize( linearDepthTexture, 0 ) ).toConst();
 			const depthResolution = vec2( textureSize( aoNode.depthNode, 0 ) ).toConst();
+			const depthTexelSize = vec2( 1 ).div( depthResolution ).toConst();
 			const maxTexel = aoResolution.sub( 1 ).toConst();
 			const viewPositionFromLinearDepth = createViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera );
 			// AO texel space with texel centers on integers: floor is the lower-left
@@ -58,7 +59,7 @@ export function createGtvbaoDepthAwareAo( aoNode, aoTexture, { screenUv, viewPos
 				cornerAo.push( ao );
 				// Level 0 stands for the scene-depth texel the prefilter picked, so the
 				// neighbor's point is reconstructed at that texel's center.
-				const sourceUv = depthTexelOfAoTexel( texel, depthResolution, aoResolution ).add( 0.5 ).div( depthResolution );
+				const sourceUv = depthTexelOfAoTexel( texel, depthResolution, aoResolution ).add( 0.5 ).mul( depthTexelSize );
 				const neighbor = viewPositionFromLinearDepth( sourceUv, linearDepthTexture.load( ivec2( texel ) ).r );
 				const planeDistance = abs( dot( neighbor.sub( viewPosition ), surfaceNormal ) );
 				const weight = bilinear.mul( planeDistance.div( tolerance ).oneMinus().clamp() ).toConst();

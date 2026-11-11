@@ -8,13 +8,14 @@ import {
 	Vector2
 } from 'three/webgpu';
 import { passTexture, reference, uniform } from 'three/tsl';
+import { getGtvbaoContextSignature } from './GTVBAOContextSignature.js';
 import {
 	GTVBAO_VARIANT_LIMITS,
 	getGtvbaoDebugVariantKey,
 	isGtvbaoDebugEnabled
 } from './GTVBAODebugModes.js';
 import GTVBAODepthPrefilter from './GTVBAODepthPrefilter.js';
-import { createGtvbaoFragmentNode, isAoIntensityFastPath, isExpFactorFastPath } from './GTVBAOFragmentNode.js';
+import { createGtvbaoFragmentNode, getGtvbaoFragmentVariantKey, isAoIntensityFastPath, isExpFactorFastPath } from './GTVBAOFragmentNode.js';
 import { GTVBAONodeBase } from './GTVBAONodeBase.js';
 import { GTVBAO_PASS_NAMES } from './GTVBAOPassNames.js';
 import { createGtvbaoRenderTarget } from './GTVBAORenderTarget.js';
@@ -25,6 +26,7 @@ const _quadMesh = /*@__PURE__*/ new QuadMesh();
 const _size = /*@__PURE__*/ new Vector2();
 const _temporalRotations = [ 60, 300, 180, 240, 120, 0 ];
 const _spatialOffsets = [ 0, 0.5, 0.25, 0.75 ];
+const MATERIAL_CACHE_LIMIT = 8;
 let _rendererState;
 class GTVBAONode extends GTVBAONodeBase {
 	static get type() {
@@ -85,6 +87,12 @@ class GTVBAONode extends GTVBAONodeBase {
 		this._debugRenderTarget = createGtvbaoRenderTarget( GTVBAO_PASS_NAMES.debug, RGBAFormat );
 		this._material = new NodeMaterial();
 		this._material.name = GTVBAO_PASS_NAMES.ao;
+		// One compiled material per variant avoids recompiling AO when switching back
+		// or rebuilding a consumer; a bound keeps slider sweeps from accumulating pipelines.
+		// Depth/normal node identities and primitive context flags invalidate the cache;
+		// object/function entries are per-build nodes and closures, not deterministic AO inputs.
+		this._materials = new Map();
+		this._materialInputs = null;
 		this._fragmentContext = null;
 		this._logarithmicDepthBuffer = false;
 		// The AO target uses LinearFilter, so consumers sampling at full resolution get
@@ -131,8 +139,38 @@ class GTVBAONode extends GTVBAONodeBase {
 			this._material.needsUpdate = true;
 			return;
 		}
-		this._material.fragmentNode = createGtvbaoFragmentNode( this, this._logarithmicDepthBuffer, this._fragmentContext );
-		this._material.needsUpdate = true;
+		const previousMaterial = this._material;
+		let previousMaterialDisposed = false;
+		const inputs = this._materialInputs;
+		const contextSignature = getGtvbaoContextSignature( this._fragmentContext );
+		if ( inputs === null || inputs.depthNode !== this.depthNode || inputs.normalNode !== this.normalNode || inputs.contextSignature !== contextSignature ) {
+			for ( const material of this._materials.values() ) {
+				material.dispose();
+				previousMaterialDisposed ||= material === previousMaterial;
+			}
+			this._materials.clear();
+			this._materialInputs = { depthNode: this.depthNode, normalNode: this.normalNode, contextSignature };
+		}
+		const key = getGtvbaoFragmentVariantKey( this, this._logarithmicDepthBuffer );
+		let material = this._materials.get( key );
+		if ( material !== undefined ) {
+			this._materials.delete( key );
+			this._materials.set( key, material );
+		} else {
+			material = new NodeMaterial();
+			material.name = GTVBAO_PASS_NAMES.ao;
+			material.fragmentNode = createGtvbaoFragmentNode( this, this._logarithmicDepthBuffer, this._fragmentContext );
+			this._materials.set( key, material );
+			while ( this._materials.size > MATERIAL_CACHE_LIMIT ) {
+				const oldestKey = this._materials.keys().next().value;
+				const oldestMaterial = this._materials.get( oldestKey );
+				oldestMaterial.dispose();
+				previousMaterialDisposed ||= oldestMaterial === previousMaterial;
+				this._materials.delete( oldestKey );
+			}
+		}
+		if ( previousMaterial !== material && ! previousMaterialDisposed && ! [ ...this._materials.values() ].includes( previousMaterial ) ) previousMaterial.dispose();
+		this._material = material;
 	}
 	_getActiveRenderTarget() {
 		return isGtvbaoDebugEnabled( this.debugMode.value ) ? this._debugRenderTarget : this._aoRenderTarget;
@@ -161,7 +199,8 @@ class GTVBAONode extends GTVBAONodeBase {
 		const targetIsDebug = renderTarget === this._debugRenderTarget;
 		const aoWidth = Math.max( 1, Math.round( width * this.resolutionScale ) );
 		const aoHeight = Math.max( 1, Math.round( height * this.resolutionScale ) );
-		this._depthPrefilter.setSize( aoWidth, aoHeight, width, height );
+		if ( this.useDepthMips.value ) this._depthPrefilter.setSize( aoWidth, aoHeight, width, height );
+		else this._depthPrefilter.release();
 		const projectionScale = this._camera.projectionMatrix.elements[ 5 ];
 		const last = this._lastSize;
 		if (
@@ -217,7 +256,10 @@ class GTVBAONode extends GTVBAONodeBase {
 		this._depthPrefilter.dispose();
 		this._aoRenderTarget.dispose();
 		this._debugRenderTarget.dispose();
-		this._material.dispose();
+		const materials = new Set( this._materials.values() );
+		materials.add( this._material );
+		for ( const material of materials ) material.dispose();
+		this._materials.clear();
 	}
 }
 export default GTVBAONode;

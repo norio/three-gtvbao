@@ -106,8 +106,8 @@ production example with the same AO, denoising, TRAA, and lighting checks.
 The page imports the actual example, freezes its camera and animation, and uses
 fixed denoiser noise. Each scenario runs five native frames. The last frame's
 backend calls count pre-pass, lit scene, AO, denoising, compute work, and depth
-MIP draws. AO frames require two compute dispatches on WebGPU, or five depth
-MIP render passes and zero compute dispatches on WebGL2;
+MIP draws. AO frames require one compute pass (containing two dispatches) on WebGPU, or
+five depth MIP render passes and zero compute passes on WebGL2;
 float output hashes support comparisons across checkouts.
 
 The first ten `ui-*` scenarios mirror the public view buttons (full render, AO only

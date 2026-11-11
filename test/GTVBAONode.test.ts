@@ -100,18 +100,41 @@ test("GTVBAONode variant values invalidate the shader variant", () => {
   node.dispose();
 });
 
-test("GTVBAONode refreshes the internal AO material on sector measure changes", () => {
+test("GTVBAONode selects a material built for the new variant on sector measure changes after setup", () => {
   const node = createTestGtvbaoNode();
-  const materialVersion = getInternalMaterial(node).version;
+  const internals = node as unknown as { _fragmentContext: object | null; _refreshMaterialFragmentNode(): void };
+  // Simulate a post-setup() state, where each variant gets its own material.
+  internals._fragmentContext = {};
+  internals._refreshMaterialFragmentNode();
+  const cosineMaterial = getInternalMaterial(node);
+  const cosineVersion = cosineMaterial.version;
   const fragmentRefreshes = installMaterialFragmentRefreshProbe(node);
 
   node.sectorMeasure.value = "angle";
 
   assert.deepEqual(fragmentRefreshes.consume(), ["angle"]);
-  assert.equal(getInternalMaterial(node).version, materialVersion + 1);
+  const angleMaterial = getInternalMaterial(node);
+  assert.notEqual(angleMaterial, cosineMaterial);
+
+  node.sectorMeasure.value = "cosine";
+  assert.equal(getInternalMaterial(node), cosineMaterial);
+  assert.equal(cosineMaterial.version, cosineVersion);
   // Unknown values fall back to the cosine measure.
   (node.sectorMeasure as { value: unknown }).value = "bogus";
   assert.equal(node.sectorMeasure.value, "cosine");
+
+  node.dispose();
+});
+
+test("GTVBAONode bumps the placeholder material version on variant changes before setup", () => {
+  const node = createTestGtvbaoNode();
+  const material = getInternalMaterial(node);
+  const version = material.version;
+
+  node.sectorMeasure.value = "angle";
+
+  assert.equal(getInternalMaterial(node), material);
+  assert.equal(material.version, version + 1);
 
   node.dispose();
 });
@@ -172,16 +195,18 @@ test("GTVBAONode releases depth kernels on depth-mode changes and disposal", () 
   const node = createTestGtvbaoNode();
   const { _depthPrefilter: prefilter } = node as unknown as {
     _depthPrefilter: {
-      compute(renderer: { compute(kernel: ComputeNode): void }): void;
+      compute(renderer: { compute(kernels: ComputeNode[]): void }): void;
       setLogarithmicDepthBuffer(value: boolean): void;
     };
   };
   const liveKernels = new Set<ComputeNode>();
   const renderer = {
-    compute(kernel: ComputeNode) {
-      if (liveKernels.has(kernel)) return;
-      liveKernels.add(kernel);
-      kernel.addEventListener("dispose", () => liveKernels.delete(kernel));
+    compute(kernels: ComputeNode[]) {
+      for (const kernel of kernels) {
+        if (liveKernels.has(kernel)) continue;
+        liveKernels.add(kernel);
+        kernel.addEventListener("dispose", () => liveKernels.delete(kernel));
+      }
     },
   };
   node.setSize(64, 32);
@@ -210,14 +235,9 @@ function getInternalMaterial(node: GTVBAONode) {
 }
 
 function installMaterialFragmentRefreshProbe(node: GTVBAONode) {
-  const internals = node as unknown as {
-    _refreshMaterialFragmentNode(): void;
-    _fragmentContext: object | null;
-  };
+  const internals = node as unknown as { _refreshMaterialFragmentNode(): void };
   const refreshes: string[] = [];
   const original = internals._refreshMaterialFragmentNode.bind(node);
-  // Simulate a post-setup() state so the real refresh rebuilds the fragment node.
-  internals._fragmentContext = {};
   internals._refreshMaterialFragmentNode = () => {
     refreshes.push(node.sectorMeasure.value);
     original();

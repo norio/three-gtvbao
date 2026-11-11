@@ -88,6 +88,32 @@ test("GTVBAODenoiseNode rebuilds its fragment when the AO depth-mips variant cha
   node.dispose();
 });
 
+test("GTVBAODenoiseNode keeps its material when setup repeats with unchanged inputs", () => {
+  const node = createDenoiseNode();
+  const material = (node as unknown as { _material: { version: number } })._material;
+  const setupWith = (context: object) =>
+    node.setup({ getSharedContext: () => context, renderer: { logarithmicDepthBuffer: false } } as never);
+
+  setupWith({ flag: 1, closure: () => 1, nested: {} });
+  const builtVersion = material.version;
+
+  // Each consumer build calls setup with a fresh context holding new closures and nodes.
+  setupWith({ flag: 1, closure: () => 2, nested: {} });
+  assert.equal(material.version, builtVersion);
+
+  setupWith({ flag: 2, closure: () => 2, nested: {} });
+  assert.equal(material.version, builtVersion + 1);
+
+  node.noiseNode = createTextureNode() as never;
+  setupWith({ flag: 2 });
+  assert.equal(material.version, builtVersion + 2);
+
+  setupWith({ flag: 2 });
+  assert.equal(material.version, builtVersion + 2);
+
+  node.dispose();
+});
+
 test("GTVBAODenoiseNode does not dispose a user-supplied noise texture", () => {
   const node = createDenoiseNode();
   const userNoise = createTextureNode();

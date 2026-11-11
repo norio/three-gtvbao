@@ -15,7 +15,6 @@ import {
 	interleavedGradientNoise,
 	inverseSqrt,
 	ivec2,
-	log2,
 	logarithmicDepthToViewZ,
 	max,
 	min,
@@ -36,27 +35,19 @@ import {
 	viewZToPerspectiveDepth
 } from 'three/tsl';
 import { getDepthNormal } from './GTVBAODepthNormal.js';
-import { GTVBAO_DEBUG_MODE_OPTIONS } from './GTVBAODebugModes.js';
+import { GTVBAO_DEBUG_MODE_OPTIONS, getGtvbaoDebugVariantKey } from './GTVBAODebugModes.js';
 import { createHorizonRemap } from './GTVBAOHorizonRemap.js';
-import { GTVBAO_DEPTH_MIP_COUNT, depthTexelOfAoTexel } from './GTVBAODepthPrefilter.js';
+import { GTVBAO_DEPTH_MIP_COUNT, depthTexelOfAoTexel, sceneDepthToLinearDepth } from './GTVBAODepthPrefilter.js';
 import { createViewVectorFrame, projectSliceDirection } from './GTVBAOSliceDirection.js';
 import { createTexelViewPosition, createViewPositionFromLinearDepth, getViewPosition } from './GTVBAOViewSpace.js';
 export const isAoIntensityFastPath = ( value ) => Math.abs( value - 1 ) < 1e-6;
 export const isExpFactorFastPath = ( value ) => Math.abs( value - 2 ) < 1e-6;
-// XeGTAO default: a horizon step this many pixels (in log2) away starts using
-// the next coarser depth level.
+// XeGTAO default bias: level L stays active below 2^(offset + L + 1) AO
+// texels, so each coarser level doubles the distance threshold.
 const DEPTH_MIP_SAMPLING_OFFSET = 3.3;
-export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, sharedContext ) {
-	const uvNode = uv();
-	// Depth is fetched unfiltered from the full-resolution buffer; at reduced AO
-	// resolution the low-res pixel centers land between depth texels, so the fetched
-	// depth disagrees with the reconstruction UV and the reconstructed points step
-	// off the surface — visible as resolution/pixel-ratio dependent banding stripes.
-	// Every depth fetch is therefore addressed by integer texel and reconstructed at
-	// that texel's center, which is an exact no-op at full resolution.
-	const depthResolution = vec2( textureSize( aoNode.depthNode, 0 ) ).toConst();
-	const depthTexelSize = vec2( 1 ).div( depthResolution ).toConst();
-	const variant = {
+const MIP_LEVEL_DISTANCE_LIMITS = /*@__PURE__*/ Array.from( { length: GTVBAO_DEPTH_MIP_COUNT - 1 }, ( _, level ) => 2 ** ( DEPTH_MIP_SAMPLING_OFFSET + level + 1 ) );
+function getFragmentVariant( aoNode ) {
+	return {
 		sliceCount: aoNode.sliceCount.value,
 		stepCount: aoNode.stepCount.value,
 		aoIntensityIsOne: isAoIntensityFastPath( aoNode.aoIntensity.value ),
@@ -68,6 +59,23 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 		useDepthMips: aoNode.useDepthMips.value,
 		debugMode: aoNode.debugMode.value
 	};
+}
+export function getGtvbaoFragmentVariantKey( aoNode, logarithmicDepthBuffer ) {
+	const variant = getFragmentVariant( aoNode );
+	variant.debugMode = getGtvbaoDebugVariantKey( variant.debugMode );
+	return [ ...Object.values( variant ), aoNode.normalEncoding, logarithmicDepthBuffer ].join( '|' );
+}
+export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, sharedContext ) {
+	const uvNode = uv();
+	// Depth is fetched unfiltered from the full-resolution buffer; at reduced AO
+	// resolution the low-res pixel centers land between depth texels, so the fetched
+	// depth disagrees with the reconstruction UV and the reconstructed points step
+	// off the surface — visible as resolution/pixel-ratio dependent banding stripes.
+	// Every depth fetch is therefore addressed by integer texel and reconstructed at
+	// that texel's center, which is an exact no-op at full resolution.
+	const depthResolution = vec2( textureSize( aoNode.depthNode, 0 ) ).toConst();
+	const depthTexelSize = vec2( 1 ).div( depthResolution ).toConst();
+	const variant = getFragmentVariant( aoNode );
 	const MAX_RAY = uint( 32 );
 	const convertDepth = ( depth ) => {
 		if ( logarithmicDepthBuffer === true ) {
@@ -79,13 +87,16 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 	const loadDepth = ( sampleTexel ) => convertDepth( aoNode.depthNode.load( ivec2( sampleTexel ) ).r );
 	// Linear-depth MIP chain at AO resolution (see GTVBAODepthPrefilter). Level 0
 	// texels stand for the scene-depth texel selected by the shared center
-	// expression below and serve the center pixel and its neighbors; coarser
-	// levels are block averages that reconstruct at their own texel center. Near
+	// expression below. Of the AO consumers, only the denoiser and upsample read
+	// level 0; the AO pass derives its identical center depth from the scene depth
+	// already fetched.
+	// Coarser levels are block averages reconstructed at their own texel center. Near
 	// horizon steps keep reading the exact scene-depth texel: a decimated level 0
 	// would map steps that land inside the center's own AO texel back onto the
 	// center itself, and a zero-length sample vector reads as full occlusion.
 	const depthMips = variant.useDepthMips ? aoNode.getDepthMipNodes() : null;
 	const mipResolutions = depthMips === null ? null : depthMips.map( ( mipNode ) => vec2( textureSize( mipNode, 0 ) ).toConst() );
+	const mipTexelSizes = depthMips === null ? null : mipResolutions.map( ( resolution ) => vec2( 1 ).div( resolution ).toConst() );
 	const aoResolution = depthMips === null ? null : mipResolutions[ 0 ];
 	const sourceTexelOf = ( aoTexel ) => depthTexelOfAoTexel( aoTexel, depthResolution, aoResolution );
 	// Internal MIPs use texel coordinates and never apply a UV transform.
@@ -128,7 +139,8 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 		const aoTexel = depthMips === null ? null : floor( uvNode.mul( aoResolution ) ).toConst();
 		const surfaceTexel = ( depthMips === null ? floor( uvNode.mul( depthResolution ) ) : sourceTexelOf( aoTexel ) ).toConst();
 		const surfaceUv = surfaceTexel.add( 0.5 ).mul( depthTexelSize ).toConst();
-		const depth = loadDepth( surfaceTexel ).toVar();
+		const rawDepth = aoNode.depthNode.load( ivec2( surfaceTexel ) ).r.toConst();
+		const depth = convertDepth( rawDepth ).toVar();
 		const viewNormal = loadNormal( surfaceUv ).toVar();
 		// Background keeps the target's white clear. WGSL discard only demotes the
 		// invocation, so the AO is additionally guarded by the If below.
@@ -146,7 +158,7 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 			const viewPositionFromLinearDepth = depthMips === null ? null : createViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera );
 			const viewPosition = ( depthMips === null
 				? getViewPosition( surfaceUv, depth, aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera )
-				: viewPositionFromLinearDepth( surfaceUv, loadLinearDepth( 0, aoTexel ) ) ).toVar();
+				: viewPositionFromLinearDepth( surfaceUv, sceneDepthToLinearDepth( rawDepth, aoNode._cameraNear, aoNode._cameraFar, aoNode._isOrthographicCamera, logarithmicDepthBuffer ) ) ).toVar();
 			const aoTexelSize = vec2( 1 ).div( aoNode._resolution ).toConst();
 			const centerThickness = effectiveThickness( viewPosition ).toConst();
 			if ( variant.debugMode === GTVBAO_DEBUG_MODE_OPTIONS.Thickness ) {
@@ -244,8 +256,8 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 						// The level uses the default step exponent (2) even when expFactor differs:
 						// the exact exponent changed the result by less than 0.001 mean AO for
 						// expFactor 1-4, so the cheaper pow2 stays.
-						const nominalDistance = max( float( i ).add( 0.5 ).mul( invStepSpan ).pow2().mul( radiusVS ), float( i ).add( 1 ) );
-						const mipLevel = uint( clamp( floor( log2( nominalDistance ).sub( DEPTH_MIP_SAMPLING_OFFSET ) ), 0, GTVBAO_DEPTH_MIP_COUNT - 1 ) ).toConst();
+						const nominalDistance = max( float( i ).add( 0.5 ).mul( invStepSpan ).pow2().mul( radiusVS ), float( i ).add( 1 ) ).toConst();
+						// Threshold selection is equivalent to clamped floor( log2( distance ) - offset ).
 						sampleViewPosition = vec3( 0 ).toVar();
 						const sampleAtLevel = ( level ) => {
 							if ( level === 0 ) {
@@ -254,12 +266,12 @@ export function createGtvbaoFragmentNode( aoNode, logarithmicDepthBuffer, shared
 								return;
 							}
 							const texel = floor( stepUv.mul( mipResolutions[ level ] ) ).toConst();
-							const sampleUv = texel.add( 0.5 ).div( mipResolutions[ level ] );
+							const sampleUv = texel.add( 0.5 ).mul( mipTexelSizes[ level ] );
 							sampleViewPosition.assign( viewPositionFromLinearDepth( sampleUv, loadLinearDepth( level, texel ) ) );
 						};
-						let chain = If( mipLevel.equal( uint( 0 ) ), () => { sampleAtLevel( 0 ); } );
+						let chain = If( nominalDistance.lessThan( MIP_LEVEL_DISTANCE_LIMITS[ 0 ] ), () => { sampleAtLevel( 0 ); } );
 						for ( let level = 1; level < GTVBAO_DEPTH_MIP_COUNT - 1; level ++ ) {
-							chain = chain.ElseIf( mipLevel.equal( uint( level ) ), () => { sampleAtLevel( level ); } );
+							chain = chain.ElseIf( nominalDistance.lessThan( MIP_LEVEL_DISTANCE_LIMITS[ level ] ), () => { sampleAtLevel( level ); } );
 						}
 						chain.Else( () => { sampleAtLevel( GTVBAO_DEPTH_MIP_COUNT - 1 ); } );
 					}
