@@ -77,6 +77,7 @@ export function createGui({
   ao.add(temporalNode.blend, "value", 0.02, 1, 0.01).name("Accumulation blend").onChange(custom);
   ao.add(temporalNode.clampSigma, "value", 0, 4, 0.25).name("Accumulation clamp").onChange(custom);
   ao.add(temporalNode.parallaxBlend, "value", 0, 100, 1).name("Accumulation parallax").onChange(custom);
+  ao.add(aoNode, "upsampleJitter", 0, 4, 0.5).name("Upsample jitter").onChange(resetTraaHistory);
   ao.add(aoNode.useScreenSpaceSampling, "value").name("Screen-space radius").onChange(custom);
   ao.add(aoNode.thickness, "value", 0.01, 1, 0.01).name("Thickness").onChange(custom);
   ao.add(aoNode.useLinearThickness, "value").name("Linear thickness").onChange(custom);
@@ -88,7 +89,6 @@ export function createGui({
   ao.add(aoNode.usePerspectiveCorrectSlice, "value").name("Perspective-correct slices").onChange(custom);
   ao.add(aoNode.useDepthMips, "value").name("Depth MIPs").onChange(custom);
   ao.add(aoNode, "useDepthAwareUpsample").name("Depth-aware upsample").onChange(resetTraaHistory);
-  ao.add(aoNode, "upsampleJitter", 0, 4, 0.5).name("Upsample jitter").onChange(resetTraaHistory);
   ao.add(aoNode.debugMode, "value", GTVBAO_DEBUG_MODE_OPTIONS).name("Debug view").onChange(syncOutput);
 
   const shadow = gui.addFolder("Shadow");
