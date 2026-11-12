@@ -9,12 +9,12 @@ have no rendering errors.
 | --- | --- | --- |
 | `/test/webgpu/depth-mips.html` | 270 depth-MIP cases against a CPU reference | `window.depthMipRegression` |
 | `/test/webgpu/upsample.html` | 14 depth-aware upsample cases | `window.upsampleRegression` |
-| `/test/webgpu/temporal.html` | 39 temporal accumulation checks per depth mode (78 rows) | `window.temporalRegression` |
+| `/test/webgpu/temporal.html` | 43 temporal accumulation checks per depth mode (86 rows) | `window.temporalRegression` |
 | `/test/webgpu/math.html` | 15,120 shader comparisons against independent references | `window.mathRegression` |
 | `/test/webgpu/lighting.html` | Constant-AO lighting against an independent reference | `window.lightingRegression` |
 | `/test/webgpu/output-switch.html` | 12 first-frame AO/debug output transitions, including construction, batching, resize and half resolution | `window.outputSwitchRegression` |
 | `/test/webgpu/orthographic.html` | 10 scenarios: 8 camera-distance invariance + 2 slice-mode invariance | `window.orthographicRegression` |
-| `/test/webgpu/example.html` | 39 display/pass-order and lighting-image scenarios in the production example | `window.exampleRegression` |
+| `/test/webgpu/example.html` | 50 display/pass-order and lighting-image scenarios in the production example, raw and accumulated paths | `window.exampleRegression` |
 
 Wait for the completion result before reading it; require `passed === true`.
 The requested backend being unavailable is a failure, never a skipped passing case. These
@@ -101,20 +101,33 @@ available as `window.orthographicRegression`, `window.depthMipRegression`,
 ## Example graph
 
 Run `example.html?camera=orthographic` as well as the default perspective mode.
-Use `&backend=webgl` to run its 39 scenarios on WebGL2. Both exercise the
+Use `&backend=webgl` to run its 50 scenarios on WebGL2. Both exercise the
 production example with the same AO, denoising, TRAA, and lighting checks.
 
 The page imports the actual example, freezes its camera and animation, and uses
-fixed denoiser noise. Each scenario runs five native frames. The last frame's
+fixed denoiser noise. The example starts with accumulation on and upsample jitter 4, so
+every scenario sets `settings.accumulate` and `aoNode.upsampleJitter` itself (false and 0
+unless it says otherwise); the original scenarios stay on the raw and denoised sources. Each scenario runs five native frames. The last frame's
 backend calls count pre-pass, lit scene, AO, denoising, compute work, and depth
 MIP draws. AO frames require one compute pass (containing two dispatches) on WebGPU, or
 five depth MIP render passes and zero compute passes on WebGL2;
-float output hashes support comparisons across checkouts.
+float output hashes support comparisons across checkouts. The temporal pass
+(`GTVBAO_PASS_NAMES.temporal`) is counted too: one per frame when the accumulated source is
+rendered, zero otherwise.
 
 The first ten `ui-*` scenarios mirror the public view buttons (full render, AO only
 and AO off, with and without denoising) under temporal sampling and TRAA. The
 showcase scenarios then exercise denoised + TRAA → AO off → denoised + TRAA to
 verify that cached beauty targets remain valid when returning to the initial view.
+
+The last 11 scenarios cover the example's default paths: accumulated + TRAA lit at half
+resolution with jitter 4, accumulated lit without TRAA (lighting guards), accumulated AO-only,
+accumulated + denoised (lit and AO-only, through the second denoiser
+`denoiseAccumulatedNode`), accumulation off then on again returning to cached outputs, and
+neutral AO (intensity 0) accumulated and accumulated + denoised at full and half resolution.
+The neutral ones apply the same lighting identity checks and require the textures that path
+renders (`temporalNode`, and `denoiseAccumulatedNode` when denoising) to be exactly 1. On WebGL2
+they fail if the temporal node leaves a half-float history just below 1.
 
 AO/TRAA off → TRAA on → both off must produce pre-pass counts of 0 → 1 → 0,
 while still drawing the lit scene once. AO-only and every debug view are checked,
@@ -184,6 +197,10 @@ spatial variation, because a flat neighborhood has sigma 0 and pins the history 
   the texels entering from outside; a real camera dolly keeps the history only if the
   reprojection matrix maps the previous view space into the current one. Velocities come from
   the camera matrices in the page, not from the library.
+- A flat 3×3 neighborhood passes through bit-exact (zero tolerance): constant AO 1 and 0.75,
+  with the same history or a different one (0.9), sub-texel velocity in both axes so all four
+  history taps carry non-trivial weights, five frames. WebGL2 fails without the explicit
+  flat-neighborhood select; WebGPU does not.
 - `reset()` makes the next frame equal the input; the neighborhood clamp holds the history
   to mean ± `clampSigma`·σ of the current 3×3 (checked against an independent CPU value).
 - `parallaxBlend`: translation raises the current-frame weight by `parallaxBlend` times the

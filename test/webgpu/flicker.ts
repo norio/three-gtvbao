@@ -352,10 +352,11 @@ async function run() {
 
   const backend = assertBackend(renderer);
   const cases: CaseResult[] = [];
+  // The baseline is pinned because the example's defaults enable accumulation and jitter.
   settings.preset = preset;
   if (!only) {
     originals.restore();
-    Object.assign(settings, { aoEnabled: false, aoOnly: false, denoise: false, traa: true, temporal: true });
+    Object.assign(settings, { aoEnabled: false, aoOnly: false, denoise: false, accumulate: false, traa: true, temporal: true });
     syncOutput();
     const { result } = await measureCase("ao-off", null, false, options, output);
     cases.push(result);
@@ -364,8 +365,9 @@ async function run() {
   if (ref !== null) {
     originals.restore();
     applyGtvbaoPreset(aoNode, { ...GTVBAO_PRESETS[preset], resolutionScale: 1 }, denoiseNode);
+    aoNode.upsampleJitter = 0;
     applyNodeOptions(aoNode, ref, "ref aoNode");
-    Object.assign(settings, initialSettings, { aoEnabled: true, aoOnly: only, denoise: false, traa: true, temporal: true });
+    Object.assign(settings, initialSettings, { aoEnabled: true, aoOnly: only, denoise: false, accumulate: false, traa: true, temporal: true });
     syncOutput();
     const { result } = await measureCase("reference", 1, false, options, output, reference, true);
     cases.push(result);
@@ -377,9 +379,10 @@ async function run() {
       for (const scale of options.scales) {
         originals.restore();
         applyGtvbaoPreset(aoNode, { ...GTVBAO_PRESETS[preset], resolutionScale: scale }, denoiseNode);
+        aoNode.upsampleJitter = 0;
         applyNodeOptions(aoNode, variant.ao ?? {}, "aoNode");
         applyNodeOptions(denoiseNode, variant.denoiser ?? {}, "denoiseNode");
-        Object.assign(settings, { aoEnabled: true, aoOnly: only, denoise, traa: true, temporal: true });
+        Object.assign(settings, { aoEnabled: true, aoOnly: only, denoise, accumulate: false, traa: true, temporal: true });
         Object.assign(settings, variant.settings ?? {});
         for (const [exportName, options] of Object.entries(variant.targets ?? {})) {
           applyNodeOptions(exportedTarget(exportName), options, exportName);

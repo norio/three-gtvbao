@@ -49,6 +49,8 @@ export interface ViewSettings {
   autoLighting: boolean;
 }
 
+const SHOWCASE_UPSAMPLE_JITTER = 4;
+
 const params = new URLSearchParams(window.location.search);
 // A hidden window reports 0x0; use a square aspect until the first real resize.
 const viewportAspect = () => (window.innerWidth > 0 && window.innerHeight > 0 ? window.innerWidth / window.innerHeight : 1);
@@ -195,7 +197,7 @@ const settings: ViewSettings = {
   preset: "Showcase",
   aoEnabled: true,
   denoise: false,
-  accumulate: false,
+  accumulate: true,
   temporal: true,
   traa: true,
   aoOnly: false,
@@ -244,13 +246,10 @@ const syncOutput = () => {
 };
 
 const applyPreset = (name: ExamplePresetName) => {
-  // Showcase uses Balanced sampling at full resolution, without denoising.
-  // Full resolution does not need temporal accumulation.
-  const preset = applyGtvbaoPreset(aoNode, name === "Showcase" ? {
-    ...GTVBAO_PRESETS.Balanced,
-    resolutionScale: 1,
-    accumulate: false,
-  } : name, denoiseNode);
+  // Showcase is the example's default: Balanced (half resolution with temporal
+  // accumulation) plus a wide upsample jitter.
+  const preset = applyGtvbaoPreset(aoNode, name === "Showcase" ? GTVBAO_PRESETS.Balanced : name, denoiseNode);
+  aoNode.upsampleJitter = name === "Showcase" ? SHOWCASE_UPSAMPLE_JITTER : 0;
   settings.preset = name;
   settings.denoise = preset.denoise;
   settings.accumulate = preset.accumulate;

@@ -226,6 +226,29 @@ const clamp: Case = {
   },
 };
 
+// A flat 3x3 neighborhood has no spatial information to protect, so the output must be the current
+// value bit for bit: no tolerance. The velocity is a sub-texel shift in both axes, so every history
+// lookup blends four taps with non-trivial weights (the sum of weights times the value, divided by
+// the weight sum, is where a rounding error of one ulp below the value comes from). The history is
+// the same constant, or a different one that the flat neighborhood must discard at once. Values are
+// exact in half float, the storage format, and the check covers each of the five frames after the history was built.
+const flatPassThrough = (value: number, history: number): Case => ({
+  name: `flat neighborhood passes through bit-exact (AO ${value}, history ${history})`,
+  run: ({ renderer }) => withRig({ renderer }, {}, async rig => {
+    rig.setDistance(D);
+    rig.setVelocity(() => [(0.3 * 2) / SIZE, (0.45 * 2) / SIZE]);
+    rig.setAo(() => history);
+    for (let frame = 0; frame < 4; frame++) rig.step(frame);
+    rig.setAo(() => value);
+    let error = 0;
+    for (let frame = 4; frame < 9; frame++) {
+      rig.step(frame);
+      error = Math.max(error, compare("", (await rig.read()).ao, value, 0).error);
+    }
+    return [{ label: "five flat frames: output equals the input exactly (max error over all texels and frames)", error, tolerance: 0 }];
+  }),
+});
+
 // Camera motion with the plane fixed in the world; the history is a flat 0.9 so only the
 // current-frame weight is visible. The expectation follows the documented definition: the
 // weight grows by parallaxBlend times the sine of the angle between the two view rays.
@@ -284,5 +307,6 @@ export const cases: Case[] = [
   shift("whole-texel velocity along y", "y"),
   dolly,
   clamp,
+  ...[1, 0.75].flatMap(value => [value, 0.9].map(history => flatPassThrough(value, history))),
   parallax,
 ];

@@ -27,7 +27,6 @@ import {
 	logarithmicDepthToViewZ,
 	max,
 	min,
-	mix,
 	nodeObject,
 	normalize,
 	passTexture,
@@ -229,22 +228,30 @@ class GTVBAOTemporalNode extends GTVBAONodeBase {
 					weightSum.addAssign( weight );
 				}
 				const valid = weightSum.greaterThan( 1e-3 ).and( this._historyValid.greaterThan( 0.5 ) ).toConst();
-				const invWeight = float( 1 ).div( max( weightSum, 1e-6 ) ).toConst();
-				const historyCount = countSum.mul( invWeight ).toConst();
+				const weightDenominator = max( weightSum, 1e-6 ).toConst();
+				const historyCount = countSum.div( weightDenominator ).toConst();
 				const sum = float( 0 ).toVar();
 				const sumSquares = float( 0 ).toVar();
+				const neighborhoodMin = float( 1 ).toVar();
+				const neighborhoodMax = float( 0 ).toVar();
 				for ( let y = - 1; y <= 1; y ++ ) {
 					for ( let x = - 1; x <= 1; x ++ ) {
 						const texel = clamp( aoTexel.add( vec2( x, y ) ), vec2( 0 ), maxAoTexel );
 						const ao = this.textureNode.load( ivec2( texel ) ).r.toConst();
 						sum.addAssign( ao );
 						sumSquares.addAssign( ao.mul( ao ) );
+						neighborhoodMin.assign( min( neighborhoodMin, ao ) );
+						neighborhoodMax.assign( max( neighborhoodMax, ao ) );
 					}
 				}
-				const mean = sum.mul( 1 / 9 ).toConst();
-				const sigma = sqrt( max( sumSquares.mul( 1 / 9 ).sub( mean.mul( mean ) ), 0 ) ).toConst();
+				const mean = sum.div( 9 ).toConst();
+				const sigma = sqrt( max( sumSquares.div( 9 ).sub( mean.mul( mean ) ), 0 ) ).toConst();
 				const clampRange = this.clampSigma.mul( sigma ).toConst();
-				const historyAo = clamp( aoSum.mul( invWeight ), mean.sub( clampRange ), mean.add( clampRange ) ).toConst();
+				const clampedHistoryAo = clamp( aoSum.div( weightDenominator ), mean.sub( clampRange ), mean.add( clampRange ) ).toConst();
+				// This explicit select makes a flat neighborhood (especially neutral AO) pass through bit-exact.
+				// Divisions and explicit lerp only reduce rounding elsewhere and are insufficient on their own:
+				// WebGL2 compilers may rewrite them, and the float-to-half store may truncate.
+				const historyAo = neighborhoodMax.equal( neighborhoodMin ).select( currentAo, clampedHistoryAo ).toConst();
 				const nextCount = historyCount.add( 1 ).toConst();
 				// Screen-space AO is view dependent: occluders previously edge-on or hidden contribute differently.
 				// The neighborhood clamp does not catch these differences.
@@ -261,7 +268,7 @@ class GTVBAOTemporalNode extends GTVBAONodeBase {
 					parallax = length( cross( vec3( 0, 0, - 1 ), normalize( previousForward ) ) ).toConst();
 				}
 				const alpha = valid.select( clamp( max( float( 1 ).div( nextCount ), this.blend ).add( parallax.mul( this.parallaxBlend ) ), 0, 1 ), 1 );
-				result.assign( vec4( mix( historyAo, currentAo, alpha ), linearDepth, valid.select( min( nextCount, 255 ), 1 ), 1 ) );
+				result.assign( vec4( historyAo.add( currentAo.sub( historyAo ).mul( alpha ) ), linearDepth, valid.select( min( nextCount, 255 ), 1 ), 1 ) );
 			} );
 			return result;
 		} );

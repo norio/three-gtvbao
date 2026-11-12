@@ -2,7 +2,7 @@ import * as THREE from "three/webgpu";
 import { screenUV, texture } from "three/tsl";
 import { GTVBAO_PASS_NAMES } from "../../src/index.js";
 import {
-  renderer, scene, camera, controls, aoNode, denoiseNode, prePass, pipeline, settings, syncOutput,
+  renderer, scene, camera, controls, aoNode, denoiseNode, denoiseAccumulatedNode, temporalNode, prePass, pipeline, settings, syncOutput,
 } from "../../example/main.js";
 import { getCameraAspect, updateCameraProjection } from "../../example/camera.js";
 import { setCameraView } from "../../example/presentation.js";
@@ -40,8 +40,8 @@ noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
 noiseTexture.needsUpdate = true;
 denoiseNode.noiseNode = texture(noiseTexture);
 
-type Counts = { pre: number; lit: number; ao: number; denoise: number; compute: number; depthMip: number };
-const emptyCounts = (): Counts => ({ pre: 0, lit: 0, ao: 0, denoise: 0, compute: 0, depthMip: 0 });
+type Counts = { pre: number; lit: number; ao: number; temporal: number; denoise: number; compute: number; depthMip: number };
+const emptyCounts = (): Counts => ({ pre: 0, lit: 0, ao: 0, temporal: 0, denoise: 0, compute: 0, depthMip: 0 });
 let counts = emptyCounts();
 // The installed backend exposes these hooks, but @types/three omits them.
 const backend = renderer.backend as typeof renderer.backend & {
@@ -56,6 +56,7 @@ backend.beginRender = (context) => {
   else if (context.camera === camera) counts.lit++;
   const name = context.renderTarget?.texture.name;
   if (name === GTVBAO_PASS_NAMES.ao || name === GTVBAO_PASS_NAMES.debug) counts.ao++;
+  if (name === GTVBAO_PASS_NAMES.temporal) counts.temporal++;
   if (name === GTVBAO_PASS_NAMES.denoise) counts.denoise++;
   if (name?.startsWith("GTVBAO.DepthMip.")) counts.depthMip++;
 };
@@ -142,7 +143,12 @@ function renderFrames(scenario: string, captureFirst: boolean) {
 type Scenario = {
   name: string; enabled: boolean; traa: boolean; only?: boolean; denoise?: boolean;
   debug?: number; temporal?: boolean; intensity?: number; resolutionScale?: number;
+  // The page pins both per scenario, so it never inherits the example's startup defaults
+  // (accumulate true, upsample jitter 4): a scenario meant for the raw path stays on it.
+  accumulate?: boolean; jitter?: number;
 };
+// The public default view: Balanced at half resolution, wide upsample jitter, temporal sampling.
+const ACC = { accumulate: true, temporal: true, resolutionScale: 0.5, jitter: 4 } as const;
 const scenarios: Scenario[] = [
   // Match the public view buttons: Showcase keeps temporal sampling and TRAA
   // enabled when entering AO-only, including its first RTT allocation.
@@ -183,6 +189,19 @@ const scenarios: Scenario[] = [
   }))),
   { name: "raw-lit-half", enabled: true, traa: false, resolutionScale: 0.5 },
   { name: "denoised-lit-half", enabled: true, traa: false, denoise: true, resolutionScale: 0.5 },
+  // Accumulated paths (temporalNode, and denoiseAccumulatedNode behind it) are what the example
+  // renders by default. Switching accumulation off and on must return to cached outputs.
+  { name: "acc-lit-traa", enabled: true, traa: true, ...ACC },
+  { name: "acc-lit-direct", enabled: true, traa: false, ...ACC },
+  { name: "acc-ao-only", enabled: true, traa: true, only: true, ...ACC },
+  { name: "acc-denoised-lit-traa", enabled: true, traa: true, denoise: true, ...ACC },
+  { name: "acc-denoised-ao-only", enabled: true, traa: true, only: true, denoise: true, ...ACC },
+  { name: "acc-switch-off", enabled: true, traa: true, ...ACC, accumulate: false },
+  { name: "acc-switch-return", enabled: true, traa: true, ...ACC },
+  ...[1, 0.5].flatMap(resolutionScale => [false, true].map(denoise => ({
+    name: `accumulated-${denoise ? "denoised-" : ""}neutral-${resolutionScale === 1 ? "full" : "half"}`,
+    enabled: true, traa: false, denoise, intensity: 0, ...ACC, resolutionScale,
+  }))),
 ];
 
 async function run() {
@@ -194,10 +213,12 @@ async function run() {
     const debug = scenario.debug ?? 0;
     const only = scenario.only ?? false;
     const denoise = scenario.denoise ?? false;
+    const accumulate = scenario.accumulate ?? false;
     Object.assign(settings, {
-      aoEnabled: scenario.enabled, aoOnly: only, denoise,
+      aoEnabled: scenario.enabled, aoOnly: only, denoise, accumulate,
       traa: scenario.traa, temporal: scenario.temporal ?? false,
     });
+    aoNode.upsampleJitter = scenario.jitter ?? 0;
     aoNode.aoIntensity.value = scenario.intensity ?? defaultIntensity;
     aoNode.resolutionScale = scenario.resolutionScale ?? 1;
     aoNode.debugMode.value = debug;
@@ -210,6 +231,7 @@ async function run() {
       pre: runsAo || scenario.traa ? 1 : 0,
       lit: only || debug > 0 ? 0 : 1,
       ao: runsAo ? 1 : 0,
+      temporal: runsAo && accumulate && debug === 0 && scenario.enabled ? 1 : 0,
       denoise: runsAo && denoise && debug === 0 && scenario.enabled ? 1 : 0,
       compute: runsAo && backendName === "WebGPU" ? 1 : 0,
       depthMip: runsAo && backendName === "WebGL2" ? 5 : 0,
@@ -246,8 +268,13 @@ async function run() {
     let neutralAo = null;
     if (scenario.intensity === 0) {
       const raw = await inspectAoTexture(renderer, aoNode.getTextureNode().value);
-      const denoised = denoise ? await inspectAoTexture(renderer, denoiseNode.getTextureNode().value) : null;
-      neutralAo = { frame: 5, passed: raw.passed && (denoised?.passed ?? true), raw, denoised };
+      // Inspect the textures the rendered path actually samples, not the unused sibling's.
+      const accumulated = accumulate ? await inspectAoTexture(renderer, temporalNode.getTextureNode().value) : null;
+      const denoiser = accumulate ? denoiseAccumulatedNode : denoiseNode;
+      const denoised = denoise ? await inspectAoTexture(renderer, denoiser.getTextureNode().value) : null;
+      neutralAo = {
+        frame: 5, passed: raw.passed && (accumulated?.passed ?? true) && (denoised?.passed ?? true), raw, accumulated, denoised,
+      };
       passed &&= neutralAo.passed;
     }
     results.push({ name: scenario.name, passed, observed, expected, maxDebugError, lighting, neutralAo, hash });
