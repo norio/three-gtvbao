@@ -43,7 +43,7 @@ three.js の AO フックを使うマテリアルに AO を適用します。Unl
 import * as THREE from "three/webgpu";
 import { builtinAOContext, mrt, normalView, pass, positionView, screenUV, velocity } from "three/tsl";
 import { traa } from "three/examples/jsm/tsl/display/TRAANode.js";
-import { gtvbao, applyGtvbaoPreset, renderPassAfter, createPassthroughAoContext } from "three-gtvbao";
+import { gtvbao, gtvbaoTemporal, applyGtvbaoPreset, renderPassAfter, createPassthroughAoContext } from "three-gtvbao";
 
 // 1. Opaque pre-pass: depth, view-space normals and velocity for TRAA.
 const prePass = pass(scene, camera);
@@ -54,16 +54,18 @@ const preNormal = prePass.getTextureNode("output");
 const preDepth = prePass.getTextureNode("depth");
 const preVelocity = prePass.getTextureNode("velocity");
 
-// 2. AO reads the completed pre-pass.
+// 2. AO reads the completed pre-pass; the temporal pass accumulates it at AO resolution.
 const aoNode = gtvbao(preDepth, preNormal, camera);
 applyGtvbaoPreset(aoNode, "Balanced");
 renderPassAfter(aoNode, prePass);
+const temporalNode = gtvbaoTemporal(aoNode.getTextureNode(), preVelocity, aoNode);
+renderPassAfter(temporalNode, aoNode);
 
-// 3. Apply AO at each lit fragment's surface.
+// 3. Apply the accumulated AO at each lit fragment's surface.
 const scenePass = pass(scene, camera);
 renderPassAfter(scenePass, prePass);
 scenePass.contextNode = builtinAOContext(
-  aoNode.createDepthAwareAo(aoNode.getTextureNode(), {
+  aoNode.createDepthAwareAo(temporalNode.getTextureNode(), {
     screenUv: screenUV,
     viewPosition: positionView,
     viewNormal: normalView,
@@ -83,6 +85,10 @@ renderer.setAnimationLoop(() => pipeline.render());
 `renderPassAfter` とプリパスの `createPassthroughAoContext()` は省略しないでください。
 深度入力を先に用意し、ライティングパスの AO フックがプリパスに影響するのを防ぎます。
 変種変更のコールバックは、設定変更でシェーダーが再コンパイルされる際にパイプラインを更新します。
+
+`Balanced` は AO を半分の解像度で描画します。この解像度ではフレームごとのノイズの粒が大きく、
+TRAA だけではちらつきが残るため、`gtvbaoTemporal` が先に AO 解像度で蓄積します。
+フル解像度 (`High`) ではこのパスは任意で、`aoNode.getTextureNode()` を直接読めます。
 
 ### テンポラルアンチエイリアシングを使わない場合
 
@@ -110,16 +116,17 @@ pipeline.outputNode = scenePass;
 
 ## プリセット
 
-| プリセット | 解像度倍率 | スライス × ステップ | テンポラル | デノイズ |
-| --- | --- | --- | --- | --- |
-| `Low` | 0.5 | 1 × 8 | あり | なし |
-| `Balanced` | 0.5 | 2 × 6 | あり | なし |
-| `High` | 1 | 3 × 12 | あり | なし |
-| `No Temporal Low` | 0.5 | 2 × 6 | なし | あり |
-| `No Temporal High` | 1 | 3 × 12 | なし | あり |
+| プリセット | 解像度倍率 | スライス × ステップ | テンポラル | 蓄積 | デノイズ |
+| --- | --- | --- | --- | --- | --- |
+| `Low` | 0.5 | 1 × 8 | あり | あり | なし |
+| `Balanced` | 0.5 | 2 × 6 | あり | あり | なし |
+| `High` | 1 | 3 × 12 | あり | なし | なし |
+| `No Temporal Low` | 0.5 | 2 × 6 | なし | なし | あり |
+| `No Temporal High` | 1 | 3 × 12 | なし | なし | あり |
 
 `applyGtvbaoPreset(aoNode, presetOrName, denoiseNode?)` は設定を適用し、適用したプリセットを返します。
-描画グラフの接続は行いません。テンポラル系には TRAA などのテンポラル処理が必要で、
+描画グラフの接続は行いません。テンポラル系には TRAA などのテンポラル処理が必要です。
+蓄積ありのプリセットは、クイックスタートのように AO とその読み手の間に `gtvbaoTemporal` を置く前提です。
 デノイズ系には上記のようにデノイザ出力を接続する必要があります。
 `DEFAULT_GTVBAO_PRESET` は `"Balanced"` です。利用できる名前と設定は
 `GTVBAO_PRESET_NAMES` と `GTVBAO_PRESETS` にあります。
@@ -153,6 +160,7 @@ pipeline.outputNode = scenePass;
 | `usePerspectiveCorrectSlice` | variant | `true` | 視線ベクトルの周りにスライスを分布させ、画面に投影する。 |
 | `useDepthMips` | variant | `true` | シーン深度の代わりに線形深度 MIP チェーンをサンプルする。 |
 | `useDepthAwareUpsample` | plain | `true` | `resolutionScale < 1` かつ深度 MIP 有効時に、深度考慮アップサンプルを使う。 |
+| `upsampleJitter` | plain | `0` | 深度を考慮したアップサンプリングの参照位置を画素ごと・フレームごとにずらす幅 (AO テクセル単位)。下記参照。 |
 | `useTemporalFiltering` | plain | `true` | サンプルを毎フレーム回転させる。テンポラル処理が必要。 |
 | `normalEncoding` | plain | `"view"` | 生の view 空間法線。`[0,1]` にパックした法線なら `"directionToColor"`。 |
 | `debugMode` | variant | `0` | `GTVBAO_DEBUG_MODE_OPTIONS` から表示を選ぶ。 |
@@ -175,6 +183,34 @@ pipeline.outputNode = scenePass;
 平行投影でワールド空間サンプリング (`useScreenSpaceSampling: false`) を使うと、
 画面上の探索半径は深度に依存しません。`useLinearThickness` は引き続き view 深度に
 応じて厚みを変える設定です。ワールド空間で一定の厚みにする場合は `false` にします。
+
+`upsampleJitter` は、速度バッファのないパイプライン向けの `gtvbaoTemporal` の代替です。
+TRAA は履歴をフル解像度の 3×3 近傍の統計に切り詰めますが、低解像度のノイズを拡大したものは
+その範囲では滑らかすぎるため、履歴が毎フレーム捨てられます。アップサンプリングの参照位置を
+ずらすと、TRAA が隣接する AO テクセルを統合できるようになります。`useTemporalFiltering` と
+深度を考慮したアップサンプリングが有効なときだけ働きます。`2` 前後で `resolutionScale` 0.5 の
+ちらつきがおよそ半分になり、代わりに AO がわずかに柔らかくなります。`gtvbaoTemporal` と
+併用して効果があるのは 0.25 のときだけです。
+
+### `gtvbaoTemporal(aoTexture, velocityNode, aoNode, options?)`
+
+`new GTVBAOTemporalNode(...)` でも作成できます。アップサンプリングの前に、AO 解像度のまま AO を
+時間方向に蓄積します。各テクセルで速度バッファを使って前フレームの結果を引き当て、前フレームの
+表面の点が現在の面と同じ平面上にある場合だけ採用し、現フレームの 3×3 近傍の範囲にクランプして
+から新しいフレームと混ぜます。`getTextureNode()` が結果を返します (赤チャンネルが AO です。
+`gtvbaoDenoise` を含め、AO テクスチャを読む箇所にそのまま渡せます)。
+
+`velocityNode` は、TRAA と同じく、深度バッファと同じ解像度のプリパスの `velocity` アタッチメントです。
+深度・法線・カメラは `aoNode` から取得します。カメラを切り替えた直後は `reset()` を呼んでください。
+`dispose()` は 2 枚の half-float ターゲットを解放します。
+
+| プロパティ | 既定値 | 説明 |
+| --- | --- | --- |
+| `blend` | `0.1` | 現フレームの最小の重み。小さいほど安定し、追従は遅くなる。 |
+| `clampSigma` | `1.5` | 履歴を、近傍の平均 ± 標準偏差のこの倍数の範囲にクランプする。 |
+| `parallaxBlend` | `20` | 前フレームからの、表面への視線方向の変化 1 ラジアンあたりに加える現フレームの重み。カメラが回り込む間に接地影が遅れるのを防ぐ。`0` で無効。 |
+
+3 つとも uniform です。`.value` または `options` で設定します。
 
 ### `gtvbaoDenoise(aoTexture, depthNode, normalNode, camera, options?)`
 
@@ -205,6 +241,9 @@ pipeline.outputNode = scenePass;
 - 同じサンプル数では `cosine` のほうが暗部のノイズが多くなることがあります。ピッチによる偏りの軽減より
   低ノイズを優先する場合は `angle` を試してください。
 - 画面内の深度を使うため、隠れた形状や画面外の形状は AO に寄与しません。
+- `gtvbaoTemporal` はカメラの動きだけを基準に履歴を検証します。自ら動く表面は、前フレームの平面から
+  AO テクセルおよそ 2 個分以内にある間は履歴を保ち、それを超えると履歴を作り直します。ほかの物体の
+  移動による遮蔽の変化には、近傍クランプを通じて追従します。
 - 厚みは近似です。各サンプル自身の視線方向に沿った透視補正オフセットは未実装です。
 - 深度・法線の入力は描画バッファと同じ解像度を前提にしています。深度 MIP 有効時に、解像度倍率を変えた
   プリパスを渡すと、誤った深度テクセルを参照します。

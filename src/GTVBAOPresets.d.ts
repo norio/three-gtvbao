@@ -18,6 +18,8 @@ export interface GTVBAOPreset {
   temporal: boolean;
   /** Read GTVBAODenoiseNode's output instead of the raw AO. */
   denoise: boolean;
+  /** Accumulate AO with GTVBAOTemporalNode using the pre-pass velocity buffer. */
+  accumulate: boolean;
   denoiseRadius: number;
   sectorMeasure: GTVBAOSectorMeasure;
   usePerspectiveCorrectSlice: boolean;

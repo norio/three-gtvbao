@@ -52,6 +52,14 @@ test("GTVBAO no-temporal presets use denoise by default", () => {
   }
 });
 
+test("GTVBAO presets mark which ones expect a temporal accumulation pass", () => {
+  const accumulating = Object.entries(GTVBAO_PRESETS).filter(([, preset]) => preset.accumulate).map(([name]) => name);
+
+  assert.deepEqual(accumulating, ["Low", "Balanced"]);
+  for (const preset of Object.values(GTVBAO_PRESETS)) assert.equal(typeof preset.accumulate, "boolean");
+  assert.equal(GTVBAO_PRESETS[DEFAULT_GTVBAO_PRESET].accumulate, true);
+});
+
 test("GTVBAO_PRESET_NAMES lists every preset", () => {
   assert.deepEqual(GTVBAO_PRESET_NAMES, Object.keys(GTVBAO_PRESETS));
 });
@@ -79,6 +87,9 @@ test("applyGtvbaoPreset applies a preset with one variant rebuild", () => {
   assert.equal(node.useTemporalFiltering, true);
   assert.equal(denoiseNode.radius.value, 2);
   assert.equal(denoiseNode.useTemporalDenoiseRotation, false);
+  // `accumulate` only tells the caller which texture to feed the lit pass.
+  assert.deepEqual(Object.keys(denoiseNode), ["radius", "useTemporalDenoiseRotation"]);
+  assert.equal("accumulate" in node, false);
 
   applyGtvbaoPreset(node, "No Temporal Low", denoiseNode);
 

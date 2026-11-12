@@ -43,7 +43,7 @@ three.js's AO lighting hook, such as `MeshStandardNodeMaterial`. Unlit materials
 import * as THREE from "three/webgpu";
 import { builtinAOContext, mrt, normalView, pass, positionView, screenUV, velocity } from "three/tsl";
 import { traa } from "three/examples/jsm/tsl/display/TRAANode.js";
-import { gtvbao, applyGtvbaoPreset, renderPassAfter, createPassthroughAoContext } from "three-gtvbao";
+import { gtvbao, gtvbaoTemporal, applyGtvbaoPreset, renderPassAfter, createPassthroughAoContext } from "three-gtvbao";
 
 // 1. Opaque pre-pass: depth, view-space normals and velocity for TRAA.
 const prePass = pass(scene, camera);
@@ -54,16 +54,18 @@ const preNormal = prePass.getTextureNode("output");
 const preDepth = prePass.getTextureNode("depth");
 const preVelocity = prePass.getTextureNode("velocity");
 
-// 2. AO reads the completed pre-pass.
+// 2. AO reads the completed pre-pass; the temporal pass accumulates it at AO resolution.
 const aoNode = gtvbao(preDepth, preNormal, camera);
 applyGtvbaoPreset(aoNode, "Balanced");
 renderPassAfter(aoNode, prePass);
+const temporalNode = gtvbaoTemporal(aoNode.getTextureNode(), preVelocity, aoNode);
+renderPassAfter(temporalNode, aoNode);
 
-// 3. Apply AO at each lit fragment's surface.
+// 3. Apply the accumulated AO at each lit fragment's surface.
 const scenePass = pass(scene, camera);
 renderPassAfter(scenePass, prePass);
 scenePass.contextNode = builtinAOContext(
-  aoNode.createDepthAwareAo(aoNode.getTextureNode(), {
+  aoNode.createDepthAwareAo(temporalNode.getTextureNode(), {
     screenUv: screenUV,
     viewPosition: positionView,
     viewNormal: normalView,
@@ -83,6 +85,10 @@ renderer.setAnimationLoop(() => pipeline.render());
 Keep the `renderPassAfter` calls and the pre-pass's `createPassthroughAoContext()`:
 they ensure the depth inputs are ready and prevent the lit pass's AO hook from affecting the pre-pass.
 The variant callback updates the pipeline when settings change the compiled shader.
+
+`Balanced` renders AO at half resolution, where the per-frame noise is too coarse for TRAA alone
+and flickers; `gtvbaoTemporal` accumulates it at AO resolution first. At full resolution (`High`)
+the pass is optional: read `aoNode.getTextureNode()` directly.
 
 ### Without temporal anti-aliasing
 
@@ -110,16 +116,17 @@ pipeline.outputNode = scenePass;
 
 ## Presets
 
-| Preset | Resolution scale | Slices × steps | Temporal | Denoise |
-| --- | --- | --- | --- | --- |
-| `Low` | 0.5 | 1 × 8 | yes | no |
-| `Balanced` | 0.5 | 2 × 6 | yes | no |
-| `High` | 1 | 3 × 12 | yes | no |
-| `No Temporal Low` | 0.5 | 2 × 6 | no | yes |
-| `No Temporal High` | 1 | 3 × 12 | no | yes |
+| Preset | Resolution scale | Slices × steps | Temporal | Accumulate | Denoise |
+| --- | --- | --- | --- | --- | --- |
+| `Low` | 0.5 | 1 × 8 | yes | yes | no |
+| `Balanced` | 0.5 | 2 × 6 | yes | yes | no |
+| `High` | 1 | 3 × 12 | yes | no | no |
+| `No Temporal Low` | 0.5 | 2 × 6 | no | no | yes |
+| `No Temporal High` | 1 | 3 × 12 | no | no | yes |
 
 `applyGtvbaoPreset(aoNode, presetOrName, denoiseNode?)` applies settings and returns the resolved
 preset. It does not wire the render graph: temporal presets need TRAA or another temporal resolve;
+accumulating presets expect `gtvbaoTemporal` between the AO and its consumer, as in the quick start;
 denoising presets need the denoiser's output connected as above.
 `DEFAULT_GTVBAO_PRESET` is `"Balanced"`; available names and settings are in
 `GTVBAO_PRESET_NAMES` and `GTVBAO_PRESETS`.
@@ -153,6 +160,7 @@ and `uniform` / `variant` properties through `.value`. Variant changes can rebui
 | `usePerspectiveCorrectSlice` | variant | `true` | Distribute slices around the view vector and project them to the screen. |
 | `useDepthMips` | variant | `true` | Sample the linear-depth MIP chain instead of scene depth. |
 | `useDepthAwareUpsample` | plain | `true` | Enable depth-aware upsampling when `resolutionScale < 1` and depth MIPs are enabled. |
+| `upsampleJitter` | plain | `0` | Width in AO texels of a per-pixel, per-frame jitter of the depth-aware upsample; see below. |
 | `useTemporalFiltering` | plain | `true` | Rotate samples each frame; requires a temporal resolve. |
 | `normalEncoding` | plain | `"view"` | Raw view-space normals, or `"directionToColor"` for normals packed into `[0,1]`. |
 | `debugMode` | variant | `0` | Select a view from `GTVBAO_DEBUG_MODE_OPTIONS`. |
@@ -175,6 +183,34 @@ changing zoom or the frustum, call `camera.updateProjectionMatrix()` as usual.
 With an orthographic camera, world-space sampling (`useScreenSpaceSampling: false`)
 has a depth-independent screen radius. `useLinearThickness` still explicitly scales
 thickness with view depth; set it to `false` for constant world-space thickness.
+
+`upsampleJitter` is an alternative to `gtvbaoTemporal` for pipelines without a velocity buffer.
+TRAA clips its history to the statistics of a 3×3 full-resolution neighborhood, and upsampled
+low-resolution noise is too smooth there, so the history is rejected every frame. Jittering the
+upsample footprint lets TRAA integrate neighboring AO texels instead. It is active only with
+`useTemporalFiltering` and the depth-aware upsample; around `2` roughly halves the flicker at
+`resolutionScale` 0.5 at the cost of a slightly softer AO. Combined with `gtvbaoTemporal` it only
+helps at 0.25.
+
+### `gtvbaoTemporal(aoTexture, velocityNode, aoNode, options?)`
+
+Also available as `new GTVBAOTemporalNode(...)`. Accumulates the AO over time at AO resolution,
+before it is upsampled: each texel reprojects the previous result with the velocity buffer, keeps
+it only where the previous surface point lies on the current surface's plane, clamps it to the
+current 3×3 neighborhood and blends in the new frame. `getTextureNode()` returns the result (its
+red channel is the AO; pass it wherever the AO texture is read, including `gtvbaoDenoise`).
+
+`velocityNode` is the pre-pass's `velocity` attachment at the depth buffer's resolution, as used by
+TRAA. Depth, normals and camera come from `aoNode`. Call `reset()` after a camera cut; `dispose()`
+releases the two half-float targets.
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `blend` | `0.1` | Minimum weight of the current frame. Lower is steadier and slower to follow. |
+| `clampSigma` | `1.5` | History is clamped to the neighborhood mean ± this many standard deviations. |
+| `parallaxBlend` | `20` | Extra weight of the current frame per radian of change in the view ray to the surface since the last frame; keeps contact shadows from lagging while the camera moves around them. `0` disables. |
+
+All three are uniforms; set them through `.value` or as `options`.
 
 ### `gtvbaoDenoise(aoTexture, depthNode, normalNode, camera, options?)`
 
@@ -206,6 +242,9 @@ using their integral weights.
 - `cosine` can be noisier in dark regions at the same sample count. Try `angle` if lower noise
   matters more than reducing pitch bias.
 - AO uses screen-space depth, so hidden or off-screen geometry cannot contribute.
+- `gtvbaoTemporal` validates history against camera motion only. Surfaces that move on their own keep
+  their history while they stay within about two AO texels of their previous plane and restart it
+  beyond that; changes in occlusion caused by other moving objects are followed through the neighborhood clamp.
 - Thickness is an approximation; the perspective-correct offset along each sample's own view ray is not implemented.
 - The depth and normal inputs are expected at the drawing buffer's resolution. With depth MIPs enabled,
   a pre-pass rendered at a different resolution scale selects the wrong depth texels.

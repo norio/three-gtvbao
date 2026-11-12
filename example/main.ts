@@ -16,6 +16,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   gtvbao,
   gtvbaoDenoise,
+  gtvbaoTemporal,
   applyGtvbaoPreset,
   createPassthroughAoContext,
   isGtvbaoDebugEnabled,
@@ -32,7 +33,7 @@ import { createPresentation, setCameraView, updatePresentation } from "./present
 
 type PassNode = ReturnType<typeof pass>;
 type TraaNode = ReturnType<typeof traa> & { setSize(width: number, height: number): void };
-type AoSource = "off" | "raw" | "denoised";
+type AoSource = "off" | "raw" | "denoised" | "accumulated" | "accumulatedDenoised";
 
 export type ExamplePresetName = GTVBAOPresetName | "Showcase";
 
@@ -40,6 +41,7 @@ export interface ViewSettings {
   preset: ExamplePresetName | "Custom";
   aoEnabled: boolean;
   denoise: boolean;
+  accumulate: boolean;
   temporal: boolean;
   traa: boolean;
   aoOnly: boolean;
@@ -103,17 +105,32 @@ const preVelocity = prePass.getTextureNode("velocity");
 // velocity is cloned from output so TRAA keeps its half-float velocity texture.
 prePass.getTexture("output").type = THREE.UnsignedByteType;
 
-// 2. The AO reads the pre-pass; the denoiser reads the AO.
+// 2. The AO reads the pre-pass; denoising can read raw or accumulated AO.
 const aoNode = gtvbao(preDepth, preNormal, camera, { normalEncoding: "directionToColor" });
 const denoiseNode = gtvbaoDenoise(aoNode.getTextureNode(), preDepth, preNormal, camera, {
   linearDepthSource: aoNode,
   normalEncoding: "directionToColor",
 });
+const temporalNode = gtvbaoTemporal(aoNode.getTextureNode(), preVelocity, aoNode);
+const denoiseAccumulatedNode = gtvbaoDenoise(temporalNode.getTextureNode(), preDepth, preNormal, camera, {
+  linearDepthSource: aoNode,
+  normalEncoding: "directionToColor",
+});
+// Share uniforms so presets and GUI edits tune both denoisers before shader builds.
+denoiseAccumulatedNode.radius = denoiseNode.radius;
+denoiseAccumulatedNode.lumaPhi = denoiseNode.lumaPhi;
+denoiseAccumulatedNode.depthPhi = denoiseNode.depthPhi;
+denoiseAccumulatedNode.normalPhi = denoiseNode.normalPhi;
+denoiseAccumulatedNode.index = denoiseNode.index;
 renderPassAfter(aoNode, prePass);
 renderPassAfter(denoiseNode, aoNode);
+renderPassAfter(temporalNode, aoNode);
+renderPassAfter(denoiseAccumulatedNode, temporalNode);
 
 const aoTextureOf = (source: Exclude<AoSource, "off">) =>
-  source === "raw" ? aoNode.getTextureNode() : denoiseNode.getTextureNode();
+  source === "raw" ? aoNode.getTextureNode()
+    : source === "accumulated" ? temporalNode.getTextureNode()
+      : source === "accumulatedDenoised" ? denoiseAccumulatedNode.getTextureNode() : denoiseNode.getTextureNode();
 
 // 3. One lit scene pass per AO source. The AO reaches every material's
 // indirect lighting through the pass context, sampled with the depth-aware
@@ -171,12 +188,14 @@ const buildOutputNode = (key: string, source: AoSource, aoOnly: boolean, useTraa
 
 const resetTraaHistory = () => {
   for (const traaNode of traaNodes.values()) traaNode.setSize(1, 1);
+  temporalNode.reset();
 };
 
 const settings: ViewSettings = {
   preset: "Showcase",
   aoEnabled: true,
   denoise: false,
+  accumulate: false,
   temporal: true,
   traa: true,
   aoOnly: false,
@@ -188,7 +207,9 @@ const syncStats = () => { stats.dom.hidden = !settings.showFps; };
 syncStats();
 
 const syncOutput = () => {
-  const source: AoSource = !settings.aoEnabled ? "off" : settings.denoise ? "denoised" : "raw";
+  const source: AoSource = !settings.aoEnabled ? "off"
+    : settings.denoise ? (settings.accumulate ? "accumulatedDenoised" : "denoised")
+      : settings.accumulate ? "accumulated" : "raw";
   const debug = isGtvbaoDebugEnabled(aoNode.debugMode.value);
   const aoOnly = settings.aoOnly || debug;
   const useTraa = settings.traa && !debug;
@@ -202,12 +223,16 @@ const syncOutput = () => {
       : buildOutputNode(key, source, aoOnly, useTraa);
     outputNodes.set(key, outputNode);
   }
-  // Per-frame jitter only converges through TRAA; without it keep the
-  // sampling pattern fixed (and lean on the denoiser). The jitter debug
+  // Per-frame jitter converges through TRAA or AO accumulation; otherwise
+  // keep the sampling pattern fixed (and lean on the denoiser). The jitter debug
   // view shows the pattern itself, so it keeps rotating regardless.
   aoNode.useTemporalFiltering =
-    settings.temporal && (useTraa || isGtvbaoTemporalJitterDebug(aoNode.debugMode.value));
+    settings.temporal && (
+      useTraa || source === "accumulated" || source === "accumulatedDenoised" || isGtvbaoTemporalJitterDebug(aoNode.debugMode.value)
+    );
   denoiseNode.useTemporalDenoiseRotation = settings.temporal && useTraa && settings.denoise;
+  denoiseAccumulatedNode.useTemporalDenoiseRotation = denoiseNode.useTemporalDenoiseRotation;
+  if (denoiseNode.noiseNode !== null) denoiseAccumulatedNode.noiseNode = denoiseNode.noiseNode;
   updatePresentation(settings, aoNode, backendName);
   if (pipeline.outputNode === outputNode) return;
   pipeline.outputNode = outputNode;
@@ -220,12 +245,15 @@ const syncOutput = () => {
 
 const applyPreset = (name: ExamplePresetName) => {
   // Showcase uses Balanced sampling at full resolution, without denoising.
+  // Full resolution does not need temporal accumulation.
   const preset = applyGtvbaoPreset(aoNode, name === "Showcase" ? {
     ...GTVBAO_PRESETS.Balanced,
     resolutionScale: 1,
+    accumulate: false,
   } : name, denoiseNode);
   settings.preset = name;
   settings.denoise = preset.denoise;
+  settings.accumulate = preset.accumulate;
   settings.temporal = preset.temporal;
   syncOutput();
 };
@@ -238,7 +266,7 @@ aoNode.setVariantChangeCallback(() => {
 });
 
 applyPreset("Showcase");
-const gui = createGui({ renderer, sun, aoNode, denoiseNode, settings, applyPreset, syncOutput, resetTraaHistory, syncStats });
+const gui = createGui({ renderer, sun, aoNode, denoiseNode, temporalNode, settings, applyPreset, syncOutput, resetTraaHistory, syncStats });
 const updateCamera = createPresentation({ camera, controls, gui, settings, aoNode, syncOutput });
 
 window.addEventListener("resize", () => {
@@ -255,4 +283,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // The GPU regression page drives this same graph with a frozen scene.
-export { renderer, scene, camera, controls, aoNode, denoiseNode, prePass, pipeline, settings, syncOutput };
+export { renderer, scene, camera, controls, aoNode, denoiseNode, denoiseAccumulatedNode, temporalNode, prePass, pipeline, settings, syncOutput };

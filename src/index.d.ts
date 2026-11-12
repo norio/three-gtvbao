@@ -15,6 +15,8 @@ export type {
   GTVBAOVariantValue,
 } from "./GTVBAONode.js";
 export { default as GTVBAODenoiseNode, gtvbaoDenoise } from "./GTVBAODenoiseNode.js";
+export { default as GTVBAOTemporalNode, gtvbaoTemporal } from "./GTVBAOTemporalNode.js";
+export type { GTVBAOTemporalOptions } from "./GTVBAOTemporalNode.js";
 export type {
   GTVBAODenoiseNormalEncoding,
   GTVBAODenoiseOptions,

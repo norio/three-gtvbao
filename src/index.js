@@ -9,6 +9,7 @@ export {
 	isGtvbaoTemporalJitterDebug
 } from './GTVBAONode.js';
 export { default as GTVBAODenoiseNode, gtvbaoDenoise } from './GTVBAODenoiseNode.js';
+export { default as GTVBAOTemporalNode, gtvbaoTemporal } from './GTVBAOTemporalNode.js';
 export { GTVBAO_PASS_NAMES } from './GTVBAOPassNames.js';
 export { normalizeGtvbaoSectorMeasure } from './GTVBAOSectorMeasure.js';
 export {

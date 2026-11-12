@@ -1,4 +1,4 @@
-import { Fn, If, abs, clamp, dot, float, floor, fract, ivec2, logarithmicDepthToViewZ, textureSize, vec2 } from 'three/tsl';
+import { Fn, If, abs, clamp, dot, float, floor, fract, ivec2, logarithmicDepthToViewZ, screenCoordinate, textureSize, vec2 } from 'three/tsl';
 import { depthTexelOfAoTexel } from './GTVBAODepthPrefilter.js';
 import { createViewPositionFromLinearDepth, getViewPosition } from './GTVBAOViewSpace.js';
 
@@ -13,6 +13,20 @@ const PLANE_TOLERANCE_TEXELS = 4;
 // nearest AO texel rather than dividing by nothing.
 const MIN_WEIGHT = 1e-4;
 
+const JITTER_QUADRANTS = [ [ 0, 0 ], [ 1, 1 ], [ 1, 0 ], [ 0, 1 ] ];
+const JITTER_SUBSAMPLES = [ [ 1 / 6, 3 / 6 ], [ 5 / 6, 1 / 6 ], [ 3 / 6, 5 / 6 ] ];
+
+// AO cycles its step offset every 4 frames and slice rotation every 6. A jitter
+// period dividing 12 pairs each position with fixed noise phases: the combined
+// signal repeats every 12 frames for the temporal resolve to average. An
+// unrelated period beats against those cycles and drifts. Quadrants repeat
+// every 4 frames and subsamples every 3, giving a 12-frame jitter cycle.
+export function setGtvbaoUpsampleJitterPhase( target, frameId ) {
+	const q = JITTER_QUADRANTS[ frameId % 4 ];
+	const s = JITTER_SUBSAMPLES[ frameId % 3 ];
+	return target.set( ( q[ 0 ] + s[ 0 ] ) / 2, ( q[ 1 ] + s[ 1 ] ) / 2 );
+}
+
 /**
  * Depth-aware upsample of a reduced-resolution AO texture at a full-resolution
  * fragment. The four AO texels around the fragment are weighted bilinearly and
@@ -21,6 +35,11 @@ const MIN_WEIGHT = 1e-4;
  * does not bleed onto its near side the way a plain bilinear fetch lets it.
  * While the node reports the upsample disabled (full resolution, or no depth
  * MIPs to read positions from) this is the plain bilinear sample.
+ * Optional footprint jitter in AO texels combines per-pixel noise with a
+ * JS-computed per-frame phase, locked to the AO noise cycles.
+ * TRAA clips history to the mean +/- one standard deviation of a 3x3
+ * full-resolution neighborhood, where spatially correlated bilinear noise has
+ * low variance and causes history to be clipped every frame.
  *
  * `fragment` supplies the fragment's screen uv, view-space position and
  * view-space normal as nodes; a lit material passes its own varyings, a
@@ -43,7 +62,10 @@ export function createGtvbaoDepthAwareAo( aoNode, aoTexture, { screenUv, viewPos
 			const viewPositionFromLinearDepth = createViewPositionFromLinearDepth( aoNode._cameraProjectionMatrixInverse, aoNode._isOrthographicCamera );
 			// AO texel space with texel centers on integers: floor is the lower-left
 			// of the 2x2 footprint and fract the bilinear weights.
-			const footprint = screenUv.mul( aoResolution ).sub( 0.5 ).toConst();
+			const ign = ( p ) => fract( fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ).mul( 52.9829189 ) );
+			const xi = fract( vec2( ign( screenCoordinate ), ign( screenCoordinate.yx ) ).add( aoNode._upsampleJitterPhase ) );
+			const offset = xi.sub( 0.5 ).mul( aoNode._upsampleJitter );
+			const footprint = screenUv.mul( aoResolution ).sub( 0.5 ).add( offset ).toConst();
 			const base = floor( footprint ).toConst();
 			const blend = fract( footprint ).toConst();
 			// Orthographic texel footprints stay constant with view depth.
@@ -69,7 +91,13 @@ export function createGtvbaoDepthAwareAo( aoNode, aoTexture, { screenUv, viewPos
 			// The corner with the largest bilinear weight is the nearest texel.
 			const nearestAo = blend.x.lessThan( 0.5 )
 				.select( blend.y.lessThan( 0.5 ).select( cornerAo[ 0 ], cornerAo[ 2 ] ), blend.y.lessThan( 0.5 ).select( cornerAo[ 1 ], cornerAo[ 3 ] ) );
-			result.assign( weightSum.greaterThan( MIN_WEIGHT ).select( aoSum.div( weightSum ), nearestAo ) );
+			If( weightSum.greaterThan( MIN_WEIGHT ), () => {
+				result.assign( aoSum.div( weightSum ) );
+			} ).ElseIf( aoNode._upsampleJitter.greaterThan( 0 ), () => {
+				result.assign( aoTexture.load( ivec2( clamp( floor( screenUv.mul( aoResolution ) ), vec2( 0 ), maxTexel ) ) ).r );
+			} ).Else( () => {
+				result.assign( nearestAo );
+			} );
 		} ).Else( () => {
 			result.assign( aoTexture.sample( screenUv ).r );
 		} );

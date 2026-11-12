@@ -7,6 +7,7 @@ import {
   GTVBAO_VARIANT_LIMITS,
   type GTVBAODenoiseNode,
   type GTVBAONode,
+  type GTVBAOTemporalNode,
 } from "../src/index.js";
 import type { ExamplePresetName, ViewSettings } from "./main.js";
 
@@ -15,6 +16,7 @@ interface GuiContext {
   sun: THREE.DirectionalLight;
   aoNode: GTVBAONode;
   denoiseNode: GTVBAODenoiseNode;
+  temporalNode: GTVBAOTemporalNode;
   settings: ViewSettings;
   applyPreset(name: ExamplePresetName): void;
   syncOutput(): void;
@@ -27,6 +29,7 @@ export function createGui({
   sun,
   aoNode,
   denoiseNode,
+  temporalNode,
   settings,
   applyPreset,
   syncOutput,
@@ -55,6 +58,7 @@ export function createGui({
   pipeline.add(settings, "aoEnabled").name("AO").onChange(custom);
   pipeline.add(settings, "aoOnly").name("Show AO only").onChange(syncOutput);
   pipeline.add(settings, "denoise").name("Denoise").onChange(custom);
+  pipeline.add(settings, "accumulate").name("Temporal accumulation").onChange(custom);
   pipeline.add(settings, "temporal").name("Temporal jitter").onChange(custom);
   pipeline.add(settings, "traa").name("TRAA").onChange(custom);
   pipeline
@@ -70,6 +74,9 @@ export function createGui({
   ao.add(aoNode.sliceCount, "value", sliceCount.min, sliceCount.max, 1).name("Slices").onChange(custom);
   ao.add(aoNode.stepCount, "value", stepCount.min, stepCount.max, 1).name("Steps").onChange(custom);
   ao.add(aoNode.radius, "value", 0.5, 8, 0.1).name("Radius").onChange(custom);
+  ao.add(temporalNode.blend, "value", 0.02, 1, 0.01).name("Accumulation blend").onChange(custom);
+  ao.add(temporalNode.clampSigma, "value", 0, 4, 0.25).name("Accumulation clamp").onChange(custom);
+  ao.add(temporalNode.parallaxBlend, "value", 0, 100, 1).name("Accumulation parallax").onChange(custom);
   ao.add(aoNode.useScreenSpaceSampling, "value").name("Screen-space radius").onChange(custom);
   ao.add(aoNode.thickness, "value", 0.01, 1, 0.01).name("Thickness").onChange(custom);
   ao.add(aoNode.useLinearThickness, "value").name("Linear thickness").onChange(custom);
@@ -81,6 +88,7 @@ export function createGui({
   ao.add(aoNode.usePerspectiveCorrectSlice, "value").name("Perspective-correct slices").onChange(custom);
   ao.add(aoNode.useDepthMips, "value").name("Depth MIPs").onChange(custom);
   ao.add(aoNode, "useDepthAwareUpsample").name("Depth-aware upsample").onChange(resetTraaHistory);
+  ao.add(aoNode, "upsampleJitter", 0, 4, 0.5).name("Upsample jitter").onChange(resetTraaHistory);
   ao.add(aoNode.debugMode, "value", GTVBAO_DEBUG_MODE_OPTIONS).name("Debug view").onChange(syncOutput);
 
   const shadow = gui.addFolder("Shadow");
@@ -127,9 +135,11 @@ export function createGui({
       usePerspectiveCorrectSlice: aoNode.usePerspectiveCorrectSlice.value,
       useDepthMips: aoNode.useDepthMips.value,
       useDepthAwareUpsample: aoNode.useDepthAwareUpsample,
+      upsampleJitter: aoNode.upsampleJitter,
       debugMode: aoNode.debugMode.value,
     },
     denoise: { radius: denoiseNode.radius.value },
+    accumulation: { blend: temporalNode.blend.value, clampSigma: temporalNode.clampSigma.value },
     shadow: {
       type: Object.entries(shadowTypes).find(([, value]) => value === renderer.shadowMap.type)?.[0],
       radius: sun.shadow.radius,

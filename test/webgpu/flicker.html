@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>GTVBAO temporal flicker measurement</title>
+  <style>
+    body { margin: 24px; background: #181818; color: #eee; font: 14px system-ui; }
+    .lil-gui, body > canvas { display: none; }
+    section { display: inline-block; margin: 0 24px 24px 0; }
+    canvas { width: 480px; height: auto; }
+  </style>
+  <h1>GTVBAO temporal flicker measurement</h1>
+  <p>Frozen production example under TRAA. Left: temporal-mean luma. Right: temporal standard deviation times gain. Linear values, without pass/fail thresholds.</p>
+  <pre id="status">Running…</pre>
+  <div id="images"></div>
+  <script type="module" src="./flicker.ts"></script>
+</html>

@@ -25,6 +25,7 @@ export interface GTVBAOOptions {
   usePerspectiveCorrectSlice?: boolean;
   useDepthMips?: boolean;
   useDepthAwareUpsample?: boolean;
+  upsampleJitter?: number;
   debugMode?: number;
 }
 
@@ -60,6 +61,7 @@ export default class GTVBAONode extends Node<"vec4"> {
   useTemporalFiltering: boolean;
   resolutionScale: number;
   useDepthAwareUpsample: boolean;
+  upsampleJitter: number;
   normalEncoding: GTVBAONormalEncoding;
 
   constructor(

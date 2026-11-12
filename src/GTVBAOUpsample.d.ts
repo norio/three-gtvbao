@@ -1,6 +1,9 @@
+import type { Vector2 } from "three";
 import type { Node } from "three/webgpu";
 import type GTVBAONode from "./GTVBAONode.js";
 import type { GTVBAOFragmentNodes } from "./GTVBAONode.js";
+
+export function setGtvbaoUpsampleJitterPhase(target: Vector2, frameId: number): Vector2;
 
 export function createGtvbaoDepthAwareAo(
   aoNode: GTVBAONode,

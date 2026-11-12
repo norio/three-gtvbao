@@ -20,7 +20,7 @@ import { GTVBAONodeBase } from './GTVBAONodeBase.js';
 import { GTVBAO_PASS_NAMES } from './GTVBAOPassNames.js';
 import { createGtvbaoRenderTarget } from './GTVBAORenderTarget.js';
 import { GTVBAO_SECTOR_MEASURE_OPTIONS, normalizeGtvbaoSectorMeasure } from './GTVBAOSectorMeasure.js';
-import { createGtvbaoDepthAwareAo, createGtvbaoDepthAwareAoFromBuffers } from './GTVBAOUpsample.js';
+import { createGtvbaoDepthAwareAo, createGtvbaoDepthAwareAoFromBuffers, setGtvbaoUpsampleJitterPhase } from './GTVBAOUpsample.js';
 import { createGtvbaoVariantValue as createVariantValue, normalizeGtvbaoBool as normalizeBool, normalizeGtvbaoInt as normalizeInt, normalizeGtvbaoNumber as normalizeNumber } from './GTVBAOVariantValue.js';
 const _quadMesh = /*@__PURE__*/ new QuadMesh();
 const _size = /*@__PURE__*/ new Vector2();
@@ -68,7 +68,16 @@ class GTVBAONode extends GTVBAONodeBase {
 		// AO by depth; the uniform gates it per frame, since it needs the linear-depth
 		// MIPs and does nothing useful at full resolution.
 		this.useDepthAwareUpsample = options.useDepthAwareUpsample ?? true;
+		// Width in AO texels of per-pixel, per-frame jitter of the depth-aware
+		// upsample footprint. Active only with useTemporalFiltering and while the
+		// depth-aware upsample is active. Lets a temporal resolve (TRAA) integrate
+		// neighboring AO texels, removing most coarse flicker at resolutionScale
+		// 0.5 and below at the cost of slightly softer AO. Around 2 is reasonable;
+		// 0 disables.
+		this.upsampleJitter = options.upsampleJitter ?? 0;
 		this._upsampleEnabled = uniform( 0 );
+		this._upsampleJitter = uniform( 0 );
+		this._upsampleJitterPhase = uniform( new Vector2() );
 		this._onVariantChange = null;
 		this._variantBatchDepth = 0;
 		this._batchedVariantNotify = false;
@@ -234,6 +243,9 @@ class GTVBAONode extends GTVBAONodeBase {
 		}
 		if ( this.useDepthMips.value ) this._depthPrefilter.compute( renderer );
 		this._upsampleEnabled.value = this.isDepthAwareUpsampleActive() ? 1 : 0;
+		const jitterActive = this.useTemporalFiltering === true && this.isDepthAwareUpsampleActive();
+		this._upsampleJitter.value = jitterActive ? this.upsampleJitter : 0;
+		setGtvbaoUpsampleJitterPhase( this._upsampleJitterPhase.value, frame.frameId );
 		_quadMesh.material = this._material;
 		const renderTarget = this._getActiveRenderTarget();
 		_quadMesh.name = renderTarget === this._debugRenderTarget ? GTVBAO_PASS_NAMES.debug : GTVBAO_PASS_NAMES.ao;

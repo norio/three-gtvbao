@@ -70,6 +70,7 @@ for (const sourceAudit of [false, true]) {
     assert.ok(chunk.code.includes("class GTVBAONode"));
     assert.ok(chunk.code.includes("class GTVBAODepthPrefilter"));
     assert.ok(!chunk.code.includes("class GTVBAODenoiseNode"));
+    assert.ok(!chunk.code.includes("class GTVBAOTemporalNode"));
     assert.ok(!chunk.code.includes("GTVBAO_PRESETS"));
     assert.ok(!chunk.imports.some((id) => id.includes("SimplexNoise")));
   });
@@ -81,6 +82,15 @@ for (const sourceAudit of [false, true]) {
     assert.ok(!chunk.code.includes("class GTVBAODepthPrefilter"));
     assert.ok(!chunk.code.includes("gtvbaoFastAcosNorm"));
     // Only the denoiser's own quad should survive the shared helper import.
+    assert.equal(chunk.code.match(/new QuadMesh\(/g)?.length, 1);
+  });
+
+  test(`tree shaking: temporal accumulation excludes AO and prefilter allocation (${mode})`, async () => {
+    const chunk = await bundle(`export { gtvbaoTemporal } from ${entry};`, sourceAudit);
+    assert.ok(chunk.code.includes("class GTVBAOTemporalNode"));
+    assert.ok(!chunk.code.includes("class GTVBAONode"));
+    assert.ok(!chunk.code.includes("class GTVBAODepthPrefilter"));
+    assert.ok(!chunk.code.includes("class GTVBAODenoiseNode"));
     assert.equal(chunk.code.match(/new QuadMesh\(/g)?.length, 1);
   });
 

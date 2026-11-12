@@ -9,6 +9,7 @@ have no rendering errors.
 | --- | --- | --- |
 | `/test/webgpu/depth-mips.html` | 270 depth-MIP cases against a CPU reference | `window.depthMipRegression` |
 | `/test/webgpu/upsample.html` | 14 depth-aware upsample cases | `window.upsampleRegression` |
+| `/test/webgpu/temporal.html` | 39 temporal accumulation checks per depth mode (78 rows) | `window.temporalRegression` |
 | `/test/webgpu/math.html` | 15,120 shader comparisons against independent references | `window.mathRegression` |
 | `/test/webgpu/lighting.html` | Constant-AO lighting against an independent reference | `window.lightingRegression` |
 | `/test/webgpu/output-switch.html` | 12 first-frame AO/debug output transitions, including construction, batching, resize and half resolution | `window.outputSwitchRegression` |
@@ -161,3 +162,69 @@ with `?backend=webgl`. The version server aliases all `three`, `three/webgpu`,
 `three/tsl`, addons and example imports together. Use fresh page loads after
 source changes. [The r185.1 investigation](../../docs/r185-lighting-regression.md)
 records the observed failure, generated shader cause, and verification scope.
+
+## Temporal accumulation
+
+`temporal.html` drives the public `gtvbaoTemporal()` node through its real `setup()` and
+`updateBefore()` on a 16×16 AO/depth/velocity fixture (synthetic textures, a camera with a
+rotated, offset pose) and reads the half-float output back through a probe. It runs once with
+the normal and once with the logarithmic depth buffer. Each row is a maximum absolute error
+against a tolerance (`HALF = 3e-3` covers half-float storage; history lengths allow 0.1).
+Unless a case is about the clamp, `clampSigma` is 1000 and the current frame has a little
+spatial variation, because a flat neighborhood has sigma 0 and pins the history by itself.
+
+- First frame equals the input and stores the linear depth; history length grows by one per
+  frame and survives non-consecutive frame ids (a paused loop).
+- Alternating AO images converge to their mean within `blend * |A-B| / (2 * (2 - blend))`
+  (the analytic ripple of the filter) plus the half-float margin, for perspective,
+  orthographic and depth-derived normals; `blend = 1` equals the current input.
+- Depth jumping by 10 (far more than the 2-texel plane tolerance) rejects the history; a
+  change of 0.2 keeps it. Both camera types.
+- Whole-texel velocity along x and along y keeps a high-contrast pattern sharp and restarts
+  the texels entering from outside; a real camera dolly keeps the history only if the
+  reprojection matrix maps the previous view space into the current one. Velocities come from
+  the camera matrices in the page, not from the library.
+- `reset()` makes the next frame equal the input; the neighborhood clamp holds the history
+  to mean ± `clampSigma`·σ of the current 3×3 (checked against an independent CPU value).
+- `parallaxBlend`: translation raises the current-frame weight by `parallaxBlend` times the
+  sine of the view-ray angle, pure rotation and `parallaxBlend = 0` do not.
+
+In a hidden Browser pane, WebGL readback waits on `requestAnimationFrame`. If a page stalls
+there, load it in an iframe and replace the iframe's `requestAnimationFrame` with a version
+paced by a Worker timer (a message-channel loop alone spins and starves the GPU fence).
+
+## Temporal flicker measurement
+
+`flicker.html` is a measurement page, not a pass/fail regression. It drives the production
+example with a frozen scene and TRAA, reads back every measured frame as float, and reports
+per case how much the image changes over time. Results are in `window.flickerRegression`
+(`tableTsv` is the same table as tab-separated text).
+
+Per-pixel temporal standard deviation does not separate a steady image from a flickering
+one: at reduced AO resolution the noise is spatially correlated, and that is what the eye
+sees. The page therefore also box-filters each frame (`blurs`, default `1,4,8` pixels) before
+taking the statistics; compare `std@4` and `delta@4` (mean frame-to-frame change).
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `size` | `960x540` | Render size. |
+| `view` | `detail` | Camera view of the example (`overview` or `detail`). |
+| `scales` | `1,0.75,0.5,0.25` | AO resolution scales to measure. |
+| `denoise` | `0` | Comma list of `0`/`1`: without and/or with the spatial denoiser. |
+| `only` | `1` | `1` measures the AO-only view, `0` the lit image (adds an `ao-off` baseline). |
+| `preset` | `Balanced` | Preset applied before each case. |
+| `warmup`, `frames` | `48`, `48` | Frames rendered before measuring, and measured. Use `warmup=200` for converged TRAA history. |
+| `variants` | one empty variant | JSON array of `{ label, ao?, denoiser?, settings?, targets? }` compared in one run: options for the AO node, the denoiser, the example's `settings`, and any object exported by `example/main.ts` by export name. |
+| `orbit` | `0` | Degrees per frame the camera orbits its target; every case sees the same path. |
+| `ref` | absent | JSON AO options of a reference case (rendered first, at scale 1 unless it sets `resolutionScale`). Each case then reports `err@k`: the mean absolute box-filtered difference to the reference frame by frame. |
+
+Example: accumulation on and off at half resolution, static and while orbiting, against an
+eight-slice reference at the same resolution:
+
+```
+flicker.html?only=0&warmup=200&frames=64&scales=0.5&variants=[{"label":"base"},{"label":"acc","settings":{"accumulate":true}}]
+flicker.html?only=0&warmup=60&frames=48&scales=0.5&orbit=0.3&ref={"sliceCount":8,"resolutionScale":0.5}&variants=[{"label":"base"},{"label":"acc","settings":{"accumulate":true}}]
+```
+
+The page pauses the animation loop around every readback, so three's `frameId` is not
+consecutive across measured frames.
